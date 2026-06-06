@@ -1,6 +1,6 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-06 | Branch: main | Status: ✅ COMPLETE — roadmap (multi-map → CTR → key-exchange) done, 100 MB randomness battery passed. Resume point: project at a clean stopping place; only optional polish remains (see NEXT).
+Last updated: 2026-06-06 | Branch: main | Status: 🔬 SECURITY-HARDENING PHASE — original roadmap (multi-map → CTR → key-exchange) is COMPLETE and proven; now entering a deliberate phase to *strengthen the cipher's security* so it can later serve as the **outer layer over a vetted primitive** ("Option B") protecting AsturAI client data. Resume point: pick the concrete hardening target (see NEXT).
 
 ## 🎯 Goal
 Build and **rigorously prove/disprove** a chaos-based stream cipher (integer PWLCM keystream)
@@ -9,14 +9,18 @@ real standards. Engine-first; any real application is deferred until the evidenc
 (and even then, only as a layer over a vetted primitive).
 
 ## ⏭️ NEXT
-The original three-branch roadmap is **COMPLETE** (multi-map → CTR → key-exchange). Remaining is
-optional polish, no new security claims:
-- ~~Heavyweight randomness (dieharder/PractRand)~~ — **DECIDED AGAINST 2026-06-06.** Both removed
-  from Homebrew (source build of third-party code only); and no statistical battery can certify
-  *security* anyway (Mersenne Twister passes them and is broken). The `ent` 100 MB result is a
-  sufficient randomness verdict. Revisit only if explicitly wanted.
-- [ ] (Optional) Wire `SeekableCTR` into `aead.py` as a selectable mode for large-file random access.
-- [ ] (Optional) Add an authentication layer over DH (fingerprint/signature) to close the MITM gap shown in `attacks/dh_mitm.py`.
+**New phase (2026-06-06): strengthen the cipher's security**, then deploy as the *outer* layer over a
+vetted primitive ("Option B" / defense-in-depth) to protect AsturAI client data — never the only lock.
+Each hardening idea must be *measured/attacked*, not asserted (project ethos). Immediate task: pick the
+concrete target. Candidates to weigh (deep-dive pending):
+- [ ] DH **authentication** layer (fingerprint/signature) — close the demonstrated MITM gap in `attacks/dh_mitm.py`.
+- [ ] **Per-component cryptanalysis resistance** beyond the naive per-map attack already defeated (the real open weakness — invertibility/structure of the PWLCM branches).
+- [ ] **Nonce-misuse resistance** (SIV-style construction) — remove the last footgun even if a nonce repeats.
+- [ ] Specify the **Option-B integration contract** with AsturAI: where the chaos layer sits, what vetted AEAD it wraps, the order of operations.
+- [ ] (Deferred) Heavyweight randomness (dieharder/PractRand) — decided against 2026-06-06 unless explicitly wanted; randomness ≠ security.
+
+Optional capability polish (no security claim, lower priority):
+- [ ] Wire `SeekableCTR` into `aead.py` as a selectable mode for large-file random access.
 
 ✅ `ent` battery (Fourmilab) on **100 MB** of the shipped 3-map keystream — PASSED (entropy 7.999998/8,
 chi-square 261.62 @ 37%, mean 127.4968, serial corr 0.0001). NIST-lite subset passes too. Strong PRNG;
@@ -54,6 +58,18 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 - ⚠️ ~700–800× slower than AES/ChaCha. **Still UNVETTED** — not for real data.
 
 ## Recent Work
+
+### ✅ DECISION 2026-06-06: Next-phase direction set — harden, then Option B for AsturAI
+> Strategic decision, no code yet. The completed roadmap left the project at a "clean stop"; the user
+> wants a unique, powerful, secure system for their projects — especially to protect the **AsturAI**
+> engine and its **clients' private data**. Set the path: **(1) now** — genuinely strengthen the chaos
+> cipher's security (target chosen next; each idea must be *measured/attacked*, not asserted); **(2)
+> later** — once meaningfully stronger, deploy it as the **outer layer wrapped around a vetted AEAD**
+> (ChaCha20-Poly1305 / AES-GCM / libsodium), i.e. "Option B" defense-in-depth — **never as the sole
+> protection.** Reaffirmed the non-negotiable: *homemade/unique ≠ secure until publicly attacked for
+> years*; the vetted primitive does the real protecting, chaos adds a unique extra wall on top. This
+> makes the v1 REPORT recommendation the official roadmap and moves the project from "COMPLETE" to a
+> security-hardening phase. NEXT rewritten accordingly.
 
 ### ✅ DONE 2026-06-06: 100 MB randomness battery (`ent` + NIST-lite) — PASSED
 > Ran the full `ent` (Fourmilab) battery on **100 MB** of the SHIPPED 3-map keystream
