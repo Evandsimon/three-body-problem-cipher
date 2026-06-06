@@ -9,12 +9,15 @@ research artifact with zero application/website code.
 
 ## What it is
 
-- `engine.py` — the chaotic core: integer PWLCM (modulus `M = 2^61 - 1`) used as a keystream,
-  XOR'd with plaintext. Pure-integer math => bit-identical keystream on any CPU/OS (solves the
-  floating-point "finite precision paradox"). Now also rejects the weak-parameter band and
+- `engine.py` — the single chaotic core: integer PWLCM (modulus `M = 2^61 - 1`) used as a
+  keystream, XOR'd with plaintext. Pure-integer math => bit-identical keystream on any CPU/OS
+  (solves the floating-point "finite precision paradox"). Rejects the weak-parameter band and
   exposes `from_master()` (hash KDF) so no caller can pick a weak key.
-- `aead.py` — **the simple, safe interface: `seal()` / `open_()`.** Wraps the core with a
-  fresh random nonce per message (no two-time pad) and encrypt-then-MAC authentication
+- `multimap.py` — **the "three-body" keystream: 3 independent PWLCMs XOR-combined.** Hides each
+  map's invertibility footprint behind the others, defeating the single-map state-recovery attack
+  (see `attacks/known_plaintext.py` Part C). Maps are independent (uncoupled) to avoid chaos sync.
+- `aead.py` — **the simple, safe interface: `seal()` / `open_()`.** Uses the 3-map keystream by
+  default + a fresh random nonce per message (no two-time pad) + encrypt-then-MAC authentication
   (HMAC-SHA256) so tampering and wrong keys are rejected. Use this, not the raw engine.
 - `demo.py` — Alice/Bob/Eve. Shows determinism + key sensitivity **only** (not security).
 
@@ -33,6 +36,7 @@ msg  = open_(key, blob)                       # raises InvalidTag if tampered / 
 | Area | File | What it answers |
 |------|------|-----------------|
 | Correctness | `tests/test_correctness.py` | round-trip, determinism, key/nonce separation |
+| **Multi-map** | `tests/test_multimap.py` | 3-map round-trip, determinism, avalanche, no short cycle |
 | **Period** | `tests/test_period.py` | does the integer keystream cycle? (Brent's algorithm) |
 | Avalanche | `tests/test_avalanche.py` | does 1 key/nonce bit flip ~50% of output bits? |
 | Randomness | `bench/nist_lite.py`, `bench/randomness.sh` | NIST-subset (+ ent/dieharder if installed) |

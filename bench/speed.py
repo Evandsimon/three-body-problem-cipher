@@ -26,10 +26,17 @@ def chaos(nbytes):
     DiscreteChaoticEngine(0x123456789ABCDEF, 0xFEDCBA987654321, nonce=1).keystream(nbytes)
 
 
+def chaos_multimap(nbytes):
+    from multimap import MultiMapEngine
+    MultiMapEngine(b"benchmark-key", b"benchmark-nonce", n_maps=3).keystream(nbytes)
+
+
 def main():
     nbytes = 256 * 1024  # 256 KB; chaos engine is pure-Python so keep it modest
     print(f"Throughput (encrypting {nbytes//1024} KB of zeros):\n")
-    c = bench("chaos PWLCM (pure-Py)", chaos, nbytes)
+    c = bench("chaos PWLCM 1-map", chaos, nbytes)
+    cm = bench("chaos multimap 3-map", chaos_multimap, nbytes)
+    print(f"  -> 3-map is {c/cm:.1f}x slower than 1-map (the honest cost of the fix)\n")
 
     try:
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -47,8 +54,8 @@ def main():
         big = 16 * 1024 * 1024  # these are fast; give them more data for a stable number
         a = bench("AES-256-CTR (lib)", aes, big)
         ch = bench("ChaCha20 (lib)", chacha, big)
-        print(f"\n  chaos is ~{a/c:,.0f}x slower than AES-256-CTR, "
-              f"~{ch/c:,.0f}x slower than ChaCha20.")
+        print(f"\n  3-map chaos (the shipped cipher) is ~{a/cm:,.0f}x slower than AES-256-CTR, "
+              f"~{ch/cm:,.0f}x slower than ChaCha20.")
     except ImportError:
         print("\n  (install `cryptography` for the AES/ChaCha baseline: "
               "pip install cryptography)")

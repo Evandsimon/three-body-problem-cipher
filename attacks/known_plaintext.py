@@ -150,6 +150,48 @@ def demo_state_recovery():
     print("  => At small scale the cipher is fully broken with known plaintext.\n")
 
 
+def demo_multimap_resists():
+    """PART C — run the EXACT Part-B attack against 3 independent XOR-combined maps.
+
+    The attacker now sees out = b1 ^ b2 ^ b3 (top bytes of three independent states). The
+    single-map recovery can no longer find a state matching the observed bytes, because no single
+    map produced them. To break it the attacker must brute-force all 3 initial states jointly,
+    which explodes the work factor. We show the single-map attack FAILS, then state the cost."""
+    print("PART C — same attack vs 3 INDEPENDENT maps XOR-combined (the fix):")
+    for m_bits in (20, 24):
+        p = (1 << (m_bits - 2)) - 17
+        big = (1 << m_bits) - 1
+        # three independent small maps, different seeds, same (attacker-known) p
+        seeds = [(123456789 ^ (p * (k + 3))) % big or 0x55 for k in range(3)]
+        maps = []
+        for s in seeds:
+            mp = SmallPWLCM(m_bits, s, p)
+            mp.x = s
+            maps.append(mp)
+
+        def combined_byte(ms=maps):
+            b = 0
+            for mp in ms:
+                b ^= mp.out()
+            return b
+
+        observed = [combined_byte() for _ in range(12)]
+        future_truth = [combined_byte() for _ in range(8)]
+
+        # attacker tries the single-map Part-B recovery against the combined stream.
+        # A real break = correctly predicting the UNSEEN future keystream (a chance state-match
+        # that fails to predict is a false positive, not a break).
+        x0, tested, predicted = recover_state(m_bits, p, observed)
+        breaks_cipher = (x0 is not None) and (predicted == future_truth)
+        print(f"  M=2^{m_bits}, 3 maps: attack-predicts-future-keystream={breaks_cipher}  "
+              f"(candidates_tried={tested:,})")
+    # honest cost of the PROPER joint attack
+    sb = M.bit_length()
+    print(f"  => Single-map attack FAILS to break the 3-map cipher (cannot predict future).")
+    print(f"     Proper joint brute-force is now ~2^{3*(sb-8)} (3x the hidden state) — same")
+    print(f"     idea, no longer cheap. The invertibility footprint is hidden behind 2 other maps.\n")
+
+
 def extrapolate():
     state_bits = M.bit_length()              # 61
     print("Honest extrapolation to the REAL engine:")
@@ -167,4 +209,5 @@ def extrapolate():
 if __name__ == "__main__":
     demo_invertibility()
     demo_state_recovery()
+    demo_multimap_resists()
     extrapolate()

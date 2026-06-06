@@ -30,7 +30,7 @@ import hashlib
 import hmac
 import os
 
-from engine import DiscreteChaoticEngine
+from multimap import DEFAULT_N_MAPS, MultiMapEngine
 
 NONCE_LEN = 16
 TAG_LEN = 32           # HMAC-SHA256
@@ -58,22 +58,27 @@ def _tag(master_key: bytes, nonce: bytes, aad: bytes, ciphertext: bytes) -> byte
     return m.digest()
 
 
-def seal(master_key: bytes, plaintext: bytes, aad: bytes = b"") -> bytes:
+def seal(master_key: bytes, plaintext: bytes, aad: bytes = b"",
+         n_maps: int = DEFAULT_N_MAPS) -> bytes:
     """Encrypt + authenticate. Returns nonce || ciphertext || tag.
 
-    A fresh random nonce is generated every call, so encrypting the same plaintext twice
-    gives different output and keystream reuse cannot happen."""
+    Keystream comes from `n_maps` independent chaotic maps XOR-combined (default 3 — the
+    three-body design that defeats the single-map state-recovery attack). A fresh random nonce
+    is generated every call, so encrypting the same plaintext twice gives different output and
+    keystream reuse cannot happen."""
     if not isinstance(master_key, (bytes, bytearray)):
         raise TypeError("master_key must be bytes")
     nonce = os.urandom(NONCE_LEN)
-    ciphertext = DiscreteChaoticEngine.from_master(master_key, nonce).encrypt(plaintext)
+    ciphertext = MultiMapEngine(master_key, nonce, n_maps).encrypt(plaintext)
     tag = _tag(master_key, nonce, aad, ciphertext)
     return nonce + ciphertext + tag
 
 
-def open_(master_key: bytes, blob: bytes, aad: bytes = b"") -> bytes:
+def open_(master_key: bytes, blob: bytes, aad: bytes = b"",
+          n_maps: int = DEFAULT_N_MAPS) -> bytes:
     """Verify + decrypt. Raises InvalidTag if the key is wrong or anything was tampered
-    with — the plaintext is NEVER returned for a bad tag."""
+    with — the plaintext is NEVER returned for a bad tag. `n_maps` must match the value used
+    by seal()."""
     if len(blob) < NONCE_LEN + TAG_LEN:
         raise InvalidTag("ciphertext too short / malformed")
     nonce = blob[:NONCE_LEN]
@@ -84,7 +89,7 @@ def open_(master_key: bytes, blob: bytes, aad: bytes = b"") -> bytes:
     if not hmac.compare_digest(expected, tag):       # constant-time: no timing leak
         raise InvalidTag("authentication failed — wrong key or tampered ciphertext")
 
-    return DiscreteChaoticEngine.from_master(master_key, nonce).decrypt(ciphertext)
+    return MultiMapEngine(master_key, nonce, n_maps).decrypt(ciphertext)
 
 
 if __name__ == "__main__":

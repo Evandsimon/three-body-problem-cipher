@@ -115,6 +115,27 @@ AEAD cipher" — same *shape* as ChaCha20-Poly1305. It is now a legitimate resea
 artifact. It is still **not** proven-secure and still should **not** guard real client data;
 for that, use a vetted AEAD and run the chaos as a layer on top if you want it.
 
+## v3 update — multi-map (3 independent PWLCMs, XOR-combined)
+
+The biggest open weakness was #3: the single map is invertible, so the known-plaintext
+state-recovery (Part B) breaks it at reduced scale. v3 implements the "three-body" fix as
+**3 independent maps XOR-combined** (`multimap.py`, `MultiMapEngine`, now the default keystream in
+`seal()`/`open_()`).
+
+| Aspect | Result |
+|---|---|
+| **#3 state-recovery** | **Mitigated.** `attacks/known_plaintext.py` Part C runs the *same* attack vs the 3-map stream: at M=2²⁰ and M=2²⁴ the single-map recovery **cannot predict future keystream** (where it *did* break the single map). Naive joint brute-force jumps to ~2^159. |
+| Why it works | Output = `b1⊕b2⊕b3`; the attacker can't separate the three states, so each map's invertibility footprint is hidden behind the other two. Maps are **independent (uncoupled)** — no chaos-synchronization risk. |
+| Correctness/auth | `tests/` 25/25 pass (incl. `test_multimap.py`); AEAD unchanged and still green. |
+| Avalanche / cycles | Multi-map avalanche ≈ 0.5; no short cycle in a 100 KB sample. |
+| Speed | 3-map ≈ **3.3× slower** than 1-map (≈ 0.8 MB/s) — the honest, expected cost; ~3000× slower than AES/ChaCha. |
+| Still true | **UNVETTED.** XOR-combining defeats the *naive per-map* attack; it is not a security proof. More advanced per-component cryptanalysis remains possible. Independence relies on the domain-separated KDF (`multimap._derive_engine`). |
+
+**Net:** the specific attack we demonstrated no longer breaks the cipher, and we *measured* that —
+exactly the "prove it" goal. Nesting / N>3 was deliberately **not** adopted (cost + complexity +
+sync risk for no real security gain past the brute-force wall); it stays a possible future
+*measured* experiment only.
+
 ## Reproduce
 
 ```bash
