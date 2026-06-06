@@ -22,6 +22,11 @@ research artifact with zero application/website code.
 - `aead.py` — **the simple, safe interface: `seal()` / `open_()`.** Uses the 3-map keystream by
   default + a fresh random nonce per message (no two-time pad) + encrypt-then-MAC authentication
   (HMAC-SHA256) so tampering and wrong keys are rejected. Use this, not the raw engine.
+- `keyexchange.py` — **agree a key over an open channel with no pre-shared secret (`DHParty`).**
+  Classic finite-field **Diffie-Hellman** over a standard RFC 3526 safe prime (pure-integer
+  `pow()`), then the agreed secret feeds straight into `seal()`. Deliberately *vetted math for the
+  key, chaos for the bulk* — not a homemade chaos key exchange. (Caveat: plain DH is unauthenticated
+  — see the MITM demo.)
 - `demo.py` — Alice/Bob/Eve. Shows determinism + key sensitivity **only** (not security).
 
 ### Safe usage (the one you actually call)
@@ -46,6 +51,8 @@ msg  = open_(key, blob)                       # raises InvalidTag if tampered / 
 | Randomness | `bench/nist_lite.py`, `bench/randomness.sh` | NIST-subset (+ ent/dieharder if installed) |
 | **Two-time pad** | `attacks/two_time_pad.py` | reuse (key,nonce) => recover both messages |
 | **Known-plaintext** | `attacks/known_plaintext.py` | map is invertible; full state-recovery at small scale |
+| **DH man-in-the-middle** | `attacks/dh_mitm.py` | passive eavesdropper fails; active MITM breaks unauthenticated DH |
+| Key exchange | `tests/test_keyexchange.py` | both sides agree; peer-value validation; end-to-end with AEAD |
 | AEAD shell | `tests/test_aead.py` | tamper/truncation/wrong-key/AAD all rejected; no two-time pad |
 | Speed | `bench/speed.py` | MB/s vs AES-256-CTR and ChaCha20 |
 
@@ -62,6 +69,8 @@ python bench/nist_lite.py      # randomness screen (zero deps)
 bash  bench/randomness.sh /tmp/ks.bin 10   # dump 10MB + ent/dieharder if installed
 python attacks/two_time_pad.py     # demonstrates the nonce-reuse break
 python attacks/known_plaintext.py  # invertibility + scaled state-recovery
+python keyexchange.py              # agree a key with no pre-shared secret, then encrypt
+python attacks/dh_mitm.py          # passive eavesdropper fails; active MITM breaks plain DH
 python bench/speed.py          # throughput vs AES/ChaCha
 ```
 

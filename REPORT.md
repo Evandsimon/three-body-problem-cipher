@@ -155,12 +155,38 @@ domain-separated SHA-512 KDF (block counter folded in). Exactly the AES-CTR cons
 **Net:** the cipher is now random-access addressable (decrypt the middle of a large file, or
 parallelize) while keeping every prior property. Security is unchanged; this is about usability.
 
+## v5 update — key-exchange layer (`keyexchange.py`, `DHParty`)
+
+Closes the last roadmap item: until now both sides needed a *pre-shared* master key. v5 lets them
+agree one over an open channel with nothing shared in advance — via **classic finite-field
+Diffie-Hellman** over a standard RFC 3526 MODP Group 14 (2048-bit) safe prime, pure-integer `pow()`.
+The agreed secret is run through a SHA-512 KDF and handed straight to `seal()`.
+
+**Deliberate design choice — vetted math for the key, chaos only for the bulk.** We did *not* invent
+a chaos-synchronization key exchange (a graveyard of broken schemes); inventing one would be the
+exact overclaim this project disproves. This is the "run chaos as a layer over a vetted primitive"
+recommendation from the v1 verdict, made concrete.
+
+| Aspect | Result |
+|---|---|
+| **Key agreement** | Both parties derive identical 32-byte keys from exchanged *public* values only; end-to-end with the chaos AEAD works with **zero pre-shared secret**. `tests/test_keyexchange.py` (14 cases incl. peer-value validation) green. |
+| **Passive eavesdropper** | `attacks/dh_mitm.py` Part A: an attacker who only *listens* (sees p, g, A, B) cannot derive the key — discrete log on a 2048-bit group. ✅ holds. |
+| **Active MITM (honest weakness)** | Part B: an attacker who can *replace* messages runs two exchanges and reads/edits everything — plain DH is **unauthenticated**. ❌ broken by design, *demonstrated*. Part C shows a verified fingerprint catches it (why TLS/Signal/SSH add authentication). |
+| Input validation | Degenerate / small-subgroup peer values (0, 1, p−1, out-of-range) are rejected. |
+| Still true | The DH layer is sound, standard math; the **chaos bulk cipher it feeds remains UNVETTED.** DH is the grown-up part; chaos is the toy. |
+
+**Net:** the system is now complete end-to-end — agree a key in the open, then encrypt/authenticate
+with the chaos AEAD — while being honest that (a) the key-agreement security comes from *vetted DH,
+not chaos*, and (b) plain DH needs an authentication layer to resist a man-in-the-middle.
+
 ## Reproduce
 
 ```bash
 pip install -r requirements.txt
 pytest tests/ -v
 python ctr.py
+python keyexchange.py
+python attacks/dh_mitm.py
 python tests/test_period.py
 python tests/test_avalanche.py
 python bench/nist_lite.py
