@@ -179,6 +179,34 @@ recommendation from the v1 verdict, made concrete.
 with the chaos AEAD — while being honest that (a) the key-agreement security comes from *vetted DH,
 not chaos*, and (b) plain DH needs an authentication layer to resist a man-in-the-middle.
 
+## Randomness battery — 100 MB of the SHIPPED 3-map keystream (measured 2026-06-06)
+
+Ran the full `ent` (Fourmilab) battery on **100 MB** of the actual shipped keystream
+(`MultiMapEngine`, 3 maps), plus the NIST-lite bit-level subset on a slice. This is the
+deferred "≥100 MB randomness battery" item.
+
+| Test (`ent`, byte mode, full 100 MB) | Result | Ideal | Verdict |
+|---|---|---|---|
+| Entropy | 7.999998 bits/byte | 8.0 | ✅ |
+| Chi-square | 261.62, exceeded 37.45% of the time | 10–90% band | ✅ dead center |
+| Arithmetic mean | 127.4968 | 127.5 | ✅ |
+| Monte-Carlo π | 3.141739 (error 0.00%) | π | ✅ |
+| Serial correlation | 0.000113 | 0.0 | ✅ |
+
+`ent` bit mode: entropy 1.000000 bits/bit, mean 0.5000, chi-square 0.18 (67%), serial
+corr −0.000052 — all ideal. NIST-lite subset (2 MB slice): monobit p=0.34, runs p=0.035,
+block-frequency p=0.034 — all pass.
+
+**Interpretation (honest):** the keystream is **statistically indistinguishable from random**
+across the full `ent` battery on 100 MB + the NIST subset — a strong **PRNG** result. It does
+**NOT** upgrade the security status: passing randomness tests is *necessary, not sufficient*. The
+Mersenne Twister passes `ent`/NIST too and is cryptographically broken. So this confirms "clean
+generator," not "secure cipher." Still UNVETTED.
+
+**Not run:** the heavyweight batteries `dieharder` and PractRand — both removed from Homebrew;
+they require a source build. `ent` on 100 MB is already a credible randomness verdict, and no
+statistical battery can certify *security* regardless.
+
 ## Reproduce
 
 ```bash
@@ -187,6 +215,7 @@ pytest tests/ -v
 python ctr.py
 python keyexchange.py
 python attacks/dh_mitm.py
+bash bench/randomness.sh /tmp/ks.bin 100   # dumps 100 MB of the shipped keystream + ent
 python tests/test_period.py
 python tests/test_avalanche.py
 python bench/nist_lite.py

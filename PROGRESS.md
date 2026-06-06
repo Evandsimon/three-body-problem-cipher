@@ -1,6 +1,6 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-06 | Branch: key-exchange | Status: v5 key-exchange built & proven (branch, pre-merge); roadmap (multi-map → CTR → key-exchange) COMPLETE
+Last updated: 2026-06-06 | Branch: main | Status: roadmap COMPLETE (multi-map → CTR → key-exchange); 100 MB randomness battery passed
 
 ## 🎯 Goal
 Build and **rigorously prove/disprove** a chaos-based stream cipher (integer PWLCM keystream)
@@ -11,10 +11,13 @@ real standards. Engine-first; any real application is deferred until the evidenc
 ## ⏭️ NEXT
 The original three-branch roadmap is **COMPLETE** (multi-map → CTR → key-exchange). Remaining is
 optional polish, no new security claims:
-- [ ] **Merge `key-exchange` → `main`** when ready (branch 3 proven; awaiting go-ahead).
-- [ ] (Optional) Install `ent` + `dieharder` (`brew install ent dieharder`) and run the full randomness battery on ≥100 MB.
+- [ ] (Optional) Heavyweight randomness: build `dieharder`/PractRand from source (both removed from Homebrew) and run on the 100 MB dump.
 - [ ] (Optional) Wire `SeekableCTR` into `aead.py` as a selectable mode for large-file random access.
 - [ ] (Optional) Add an authentication layer over DH (fingerprint/signature) to close the MITM gap shown in `attacks/dh_mitm.py`.
+
+✅ `ent` battery (Fourmilab) on **100 MB** of the shipped 3-map keystream — PASSED (entropy 7.999998/8,
+chi-square 261.62 @ 37%, mean 127.4968, serial corr 0.0001). NIST-lite subset passes too. Strong PRNG;
+does NOT change UNVETTED status. See REPORT.md "Randomness battery".
 
 ✅ Branch 1 (multi-map) merged. ✅ Branch 2 (seekable CTR) merged. ✅ Branch 3 (key-exchange) DONE, see below.
 
@@ -48,6 +51,17 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 - ⚠️ ~700–800× slower than AES/ChaCha. **Still UNVETTED** — not for real data.
 
 ## Recent Work
+
+### ✅ DONE 2026-06-06: 100 MB randomness battery (`ent` + NIST-lite) — PASSED
+> Ran the full `ent` (Fourmilab) battery on **100 MB** of the SHIPPED 3-map keystream
+> (`MultiMapEngine`), plus the NIST-lite bit subset on a slice. `bench/randomness.sh` updated to dump
+> the shipped multimap (was single-map). Results: entropy 7.999998/8, chi-square 261.62 (exceeded
+> 37.45% — dead center), arithmetic mean 127.4968, Monte-Carlo π error 0.00%, serial correlation
+> 0.000113; bit-mode all ideal; NIST-lite monobit/runs/block-frequency all pass. **Verdict:**
+> statistically indistinguishable from random — a strong PRNG result. Honest caveat (in REPORT.md):
+> passing randomness ≠ secure (Mersenne Twister passes these too and is broken); status stays
+> UNVETTED. Heavyweight `dieharder`/PractRand were NOT run — both removed from Homebrew, need a
+> source build (left as optional). 100 MB dump at `/tmp/chaos_ks_100mb.bin`.
 
 ### ✅ DONE 2026-06-06: Branch 3 — key-exchange layer (`DHParty`) — built & PROVEN (roadmap complete)
 > Merged Branch 2 (`ctr-mode`) to `main` first (`5dccd04`). Then built `keyexchange.py`: classic

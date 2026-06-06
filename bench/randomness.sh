@@ -7,20 +7,20 @@ cd "$(dirname "$0")/.."
 OUT="${1:-/tmp/chaos_keystream.bin}"
 MB="${2:-10}"
 
-echo "==> Dumping ${MB} MB of keystream to ${OUT}"
+echo "==> Dumping ${MB} MB of the SHIPPED 3-map keystream to ${OUT}"
 python3 - "$OUT" "$MB" <<'PY'
 import sys
-from engine import DiscreteChaoticEngine
+from multimap import MultiMapEngine   # the shipped default keystream (3 independent PWLCMs)
 out, mb = sys.argv[1], int(sys.argv[2])
-eng = DiscreteChaoticEngine(0xDEADBEEFCAFEF00D1357, 0x2468ACE13579, nonce=99)
+eng = MultiMapEngine(b"randomness-battery-key", b"randomness-battery-nonce", n_maps=3)
+total = mb * 1024 * 1024
 with open(out, "wb") as f:
-    chunk = bytearray()
-    for _ in range(mb * 1024 * 1024):
-        chunk.append(eng.generate_byte())
-        if len(chunk) >= 65536:
-            f.write(chunk); chunk = bytearray()
-    f.write(chunk)
-print("   done")
+    written = 0
+    while written < total:
+        n = min(65536, total - written)
+        f.write(eng.keystream(n))
+        written += n
+print(f"   done ({written} bytes)")
 PY
 
 echo; echo "==> Pure-Python NIST-lite screen"
