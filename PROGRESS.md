@@ -1,6 +1,6 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-06 | Branch: main | Status: 🔬 SECURITY-HARDENING PHASE COMPLETE — **all 3 hardening suggestions DONE & merged to main** (`cdc598c`). Suggestion 1 (cryptanalysis), Suggestion 2 (SIV seatbelt), Suggestion 3 (authenticated DH / "secret handshake" — triple-DH, Noise/X3DH; the active man-in-the-middle that broke plain DH now FAILS automatically). 71/71 tests pass. Resume point: 🔖 **SPEED exploration** — sketch a fast "chaos + AES-NI-button" blended design (use AES hardware as a fast ingredient inside our cipher = Option B with a speed bonus). Already answered: blending AES in does NOT weaken us if combined correctly (independent keys + proven construction → AES is a safety floor). See "🔖 RESUME HERE" in NEXT. End-goal unchanged: deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data — never the only lock.
+Last updated: 2026-06-06 | Branch: period-census (pre-merge) | Status: 🔬 **v9 PERIOD CENSUS DONE** — answered the veteran's make-or-break question (§2). Honest finding: the map is a **random function**, so period ≈ **√M ≈ 2³⁰, NOT 2⁶¹** (rho/birthday law, measured exponent 0.489). **No traps:** 1,000/1,000 production keys + 7 adversarial edges show no short cycle; fixed-point capture ~1e-9 and even then mutes only 1 of the 3 XOR'd maps. Mitigated by the 3-map combiner (lcm ~2⁹⁰) + CTR mode + a per-key data limit. REPORT **v9**; `test_period.py` upgraded to a **1,000-marble guard**. **72/72 tests pass.** (Prior: all 3 hardening suggestions done & merged to main `cdc598c`.) Resume point: 🔖 **SPEED / Rust rewrite** — architecture DECIDED (chaos outer wall + AES inner vault; make the chaos engine itself fast, don't blend AES in); user leaning **Rust** for a fast constant-time core; mid-discussion on the "expert questions" checklist (§2 period = DONE; §4 constant-time + §3 KAT set = pre-port must-dos). See "🔖 RESUME HERE" in NEXT. End-goal unchanged: deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data — never the only lock.
 
 ## 🎯 Goal
 Build and **rigorously prove/disprove** a chaos-based stream cipher (integer PWLCM keystream)
@@ -10,25 +10,31 @@ real standards. Engine-first; any real application is deferred until the evidenc
 
 ## ⏭️ NEXT
 
-### 🔖 RESUME HERE (next session — speed + the "chaos + AES-button" blend)
-User wants to explore **SPEED** next. Context from the 2026-06-06 discussion:
-- Shipped 3-map cipher measured at **0.77 MB/s** (vs AES-256 ~2,146 MB/s, ChaCha20 ~1,905 MB/s →
-  ~2,500–2,800× slower). Pure-Python, byte-at-a-time, multiply-heavy = the speed cost.
-- Biggest cheap win = **leave Python** (rewrite hot loop in C/Rust, ~50–100×). Then **parallelize**
-  the 3 independent maps + CTR blocks (SIMD/multicore). Realistic ceiling ~100–500 MB/s = "feels instant."
-  Can't beat AES (its dedicated AES-NI silicon is AES-only) — honest wall.
-- **The idea on the table:** can't make the AES chip-button run our math, BUT we can **use AES-NI as a
-  fast ingredient INSIDE our cipher** (a respected technique). That makes a hybrid = part chaos, part
-  AES = literally **Option B** with a speed bonus.
-- **Already answered (2026-06-06):** *Does blending AES in weaken us?* → **No, if combined correctly** —
-  you stay **≥ as strong as AES** (it's a safety floor). Danger is only in the "glue": (1) never share a
-  key between layers (use independent/domain-separated keys — we already do), (2) use a proven combining
-  construction, don't invent the stitching, (3) keep layers independent (no leakage). Real caveat = more
-  code → more bug surface (a software risk, not a math one); covered by our test-it ethos.
-- **▶️ NEXT ACTIONS when user returns:** (a) sketch on paper (NO code yet) what a fast "chaos + AES-button"
-  blended design looks like — where chaos sits, where the fast AES stirring happens, how keys are split;
-  (b) this naturally merges with the PARKED AsturAI Option-B bridge below. Decide scope first: real
-  build vs curiosity.
+### 🔖 RESUME HERE (next session — SPEED via a Rust engine core)
+**Architecture DECIDED with user (2026-06-06):** chaos = **outer wall** (exposed, gets battle-tested by
+real attacks), AES = **inner vault** (if the chaos wall ever cracks, the client is STILL fully protected).
+Two real walls = "Option B". The blocker is **speed** — a slow cipher is unsellable ("clogs the client's
+system; nobody buys that"). **Key decision:** do NOT blend AES into chaos (that either stays slow or turns
+into "mostly AES"); instead make the **chaos engine itself fast** — the two-wall design stays, we just swap
+the slow motor. Plan: (1) rewrite the hot loop in a fast language (~50–100×), (2) parallelize the 3 maps +
+CTR blocks → realistic **~100–500 MB/s = "feels instant"**; honest wall = can't tie AES's AES-NI silicon.
+Speed today: 0.77 MB/s (3-map) vs AES ~2,146 / ChaCha ~1,905 MB/s.
+
+**Language: leaning Rust** (memory-safety for free + good constant-time tooling `subtle` → right for a
+security product) over C. User paused here ("more questions first"; switched to max-effort reasoning).
+
+**The veteran's "expert questions" checklist** (now drives the rewrite — from the 2026-06-06 chat):
+- [x] **§2 Guaranteed minimum period** — ✅ DONE this session (v9 census: period = √M ≈ 2³⁰, no traps).
+- [ ] **§4 Constant-time / branchless core** — the PWLCM `if` is secret-dependent ⇒ timing-leak risk.
+      MUST write the map **branchless** when porting (a real point for Rust). **Pre-port must-do.**
+- [ ] **§3 Frozen KAT set** — known-answer vectors so the Rust port is provably **bit-identical** to the
+      Python reference (+ differential fuzz). Build BEFORE porting. **Pre-port must-do.**
+- [ ] §1 formal threat model + bit-security claim; §3 TMTO state-size check; §5 per-key **data limit**
+      (v9 gave the number: rekey well before ~1 GB single-map); §6 external review; §7 "why chaos" value
+      prop (answered: sacrificial outer wall over a vetted vault).
+- **▶️ NEXT ACTIONS when user returns:** answer their remaining questions, then either (a) build the KAT
+  set + a branchless map and start the Rust core, or (b) keep it on paper. **Decide scope: real build vs
+  curiosity.** Also still open: the PARKED AsturAI Option-B bridge (below).
 
 **Phase (2026-06-06): strengthen the cipher's security** (DONE — all 3 below), then deploy as the *outer*
 layer over a vetted primitive ("Option B" / defense-in-depth) to protect AsturAI client data — never the
@@ -86,6 +92,20 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 - ⚠️ ~700–800× slower than AES/ChaCha. **Still UNVETTED** — not for real data.
 
 ## Recent Work
+
+### ✅ DONE 2026-06-06: v9 — period census (answered §2, the chaos make-or-break question)
+> On branch `period-census`. Built `attacks/period_census.py` to answer the veteran's #1 question —
+> "what's the GUARANTEED period over EVERY key, not the one orbit Brent measured?" Four parts:
+> (A) FULL functional-graph census at small grids (2^13–2^21) = every state mapped, not sampled;
+> (B) trap hunt on the real 2^61 grid over 1,000 production-seeded keys (real SHA-512 KDF path), 200k
+> budget; (C) 7 adversarial edge inputs; (D) period scaling law. **Finding:** the map is a RANDOM
+> FUNCTION (tails merge), so period scales as **√M ≈ 2^30, NOT 2^61** — measured exponent 0.489 (0.50 =
+> pure √N), extrapolating to ~2^29.5 ≈ 7.4e8 at k=61. Honest downward correction of the *implied* period
+> by ~2^30 (same spirit as v6's 2^159→2^122). **Not a break:** B found 0 traps in 1,000 keys, C 0/7;
+> fixed points ~1/map (random-function Poisson(1)) with basin ~1/√M ⇒ ~1e-9 capture, and even then only
+> 1 of 3 maps goes quiet. Mitigated by the 3-map combiner (lcm ~2^90), CTR mode, and a per-key data limit
+> (rekey < ~1 GB single-map). REPORT **v9** section + table + summary rows. Upgraded `tests/test_period.py`
+> from 1 orbit to a **1,000-marble regression guard**. **72/72 tests pass.** Pre-merge on `period-census`.
 
 ### ✅ DONE 2026-06-06: Suggestion 3 — authenticated DH, the "secret handshake"
 > Merged Suggestion 2 (`nonce-misuse-siv`) to `main` first (fast-forward `5f6f76d`). Then, on branch

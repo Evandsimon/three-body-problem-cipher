@@ -31,7 +31,7 @@ data.** It is a good learning artifact, not a cipher you'd trust.
 | # | Test | Result | Verdict |
 |---|------|--------|---------|
 | 1 | Correctness / determinism (`pytest`) | 8/8 pass; two instances produce identical keystream | ✅ PASS — cross-machine sync works |
-| 2 | **Period** (Brent) | Normal keys: no cycle in 2,000,000-step budget. **`key=1,ctrl=1` → period 1 (FATAL)** | ⚠️ MOSTLY OK, **weak-key class found** |
+| 2 | **Period** (Brent + census, v9) | No short cycle for 1,000/1,000 production keys (200k budget). Honest period ≈ **√M ≈ 2³⁰**, *not* 2⁶¹ (random-function "rho" law, exponent 0.489). `key=1,ctrl=1`→period 1 rejected since v2. | ⚠️ no traps; period is √M (see v9) |
 | 3 | Avalanche | key-bit flips mean **0.5000** (min .493/max .506); nonce-bit **0.4996** | ✅ PASS — excellent diffusion |
 | 4 | Randomness (NIST-lite, 1.6M bits) | monobit p=0.52, runs p=0.77, block-freq p=0.94; byte χ²=251 (ideal ~255) | ✅ PASS (screen only — see caveat) |
 | 5 | **Two-time pad** (reuse key+nonce) | `C1⊕C2 = P1⊕P2`; **both plaintexts fully recovered** | ❌ BROKEN (usage) — nonces mandatory |
@@ -47,7 +47,7 @@ data.** It is a good learning artifact, not a cipher you'd trust.
 | "Mathematically unhackable by brute force" | Brute force isn't the only attack. **Keystream reuse breaks it instantly** (test 5); the map is **invertible** (test 6). |
 | "No gradient / no clues — a miss by 1 looks like a miss by a billion" | True for *guessing the key blind* (avalanche ≈ 0.5 confirms it), but **irrelevant to real cryptanalysis**, which exploits algebraic structure, not "warmth". Structure exists. |
 | "Quantum-resistant because it doesn't factor primes" | Non-claim. **All** symmetric stream ciphers (AES, ChaCha) are already ~quantum-resistant (Grover = quadratic only). Nothing special here. A weak cipher is weak regardless of quantum. |
-| "Inherently non-repeating due to chaos" | **False for the integer version.** A finite state space *must* cycle (pigeonhole). Normal keys have a long-enough period in our budget, but **degenerate parameters cycle immediately** (test 2). |
+| "Inherently non-repeating due to chaos" | **False for the integer version.** A finite state space *must* cycle (pigeonhole). v9 census measured the honest period at **≈ √M ≈ 2³⁰** (not 2⁶¹) — the random-function "rho" law; no production key hits a short cycle, but the true number is √M. Degenerate (cycle-immediately) parameters are rejected since v2. |
 | Solves finite-precision via integer math | **TRUE and the best part.** Determinism across instances confirmed (test 1). This is the one claim that fully holds. |
 | "Passwordless, un-stealable logins" | Misleading. Stored initial conditions = a stored shared secret. Steal the DB + know the algorithm (assume yes, Kerckhoffs) ⇒ it's a stored password. |
 
@@ -302,6 +302,56 @@ the AEAD end-to-end, and a MITM/impostor lacking the static private **cannot** d
 the message; `attacks/auth_dh_mitm.py` runs the full middleman scenario and shows it FAILS. 71/71 tests
 pass. The chaos bulk cipher remains **UNVETTED** — DH is the sound part.
 
+## v9 update — period scaling law: the honest cycle length is √M, not M (`attacks/period_census.py`)
+
+The make-or-break question for any *digitised* chaotic map (Li/Mou/Cai, "dynamical degradation of
+digital chaotic maps"): a finite state set must cycle, so what is the period over *every* key — not the
+single orbit `test_period.py` happened to measure? One Brent run is one marble. v9 drops thousands.
+
+**Method (four parts, all in `attacks/period_census.py`).**
+- **A — full census (small scale).** For grids M = 2¹³…2²¹ we build the *entire* functional graph (every
+  state's successor) and read off every cycle, fixed point, and basin — the complete truth, not a sample
+  — swept across the break-point `p` (incl. the rejected edge band).
+- **B — trap hunt (real scale).** 1,000 production-seeded keys (real SHA-512 KDF + weak-band rejection +
+  warm-up) on M = 2⁶¹−1, Brent with a 200,000-step budget. A cycle inside budget = a dangerously short
+  period.
+- **C — adversarial edges.** The 7 nastiest hand-picked inputs (key/ctrl ∈ {0,1}, `p` at band edges, the
+  old period-1 class).
+- **D — scaling law.** Median *exact* period at growing grids, to read the exponent and extrapolate.
+
+**The finding — period scales as √M (the "rho" / birthday law).** The map is *not* a permutation: tails
+merge, so it behaves like a **random function**, whose largest cycle and typical orbit are ~√N, not N.
+Measured median periods fit `log₂(period) ≈ −0.39 + 0.489·k` (exponent **0.489 ≈ 0.50** = pure √N):
+
+| grid M = 2^k | measured median period | ≈ 2^ |
+|---|---|---|
+| 2²¹ | 1,015 | 2^10.0 |
+| 2²⁵ | 3,064 | 2^11.6 |
+| 2²⁹ | 16,701 | 2^14.0 |
+| 2³³ | 53,374 | 2^15.7 |
+| 2³⁷ | 215,256 | 2^17.7 |
+
+**Extrapolated to the real grid k = 61: median period ≈ 2²⁹·⁵ ≈ 7.4 × 10⁸.** A single sub-map orbit is
+**~1 billion bytes (~1 GB), not ~10¹⁸.** This is an honest downward correction of the *implied* period by
+a factor of ~2³⁰ — the same spirit as the v6 MITM correction (2¹⁵⁹ → 2¹²²).
+
+**Why it does NOT break the shipped cipher.**
+- **No traps in practice.** B: 1,000/1,000 production keys — *zero* short cycles in budget. C: 0/7 edges.
+- **Fixed points are vanishingly rare.** A confirms ~1 fixed point per map (exactly the random-function
+  Poisson(1) expectation); its basin is ~1/√M of the state space ⇒ ~2⁻³⁰ ≈ 1e-9 chance a production key
+  ever drains to a constant — and even then only **one** of the three maps goes quiet while the XOR of the
+  other two still scrambles. Tiny-cycle (≤16) basins also shrink toward 0 as the grid grows (census).
+- **The 3-map combiner stays fresh.** The combined keystream repeats only at lcm(λ₁,λ₂,λ₃) ≈ 2⁹⁰.
+- **CTR mode sidesteps it entirely** — each block is a fresh short orbit, independent of orbit length.
+
+**What we changed.** `tests/test_period.py` upgraded from 1 hand-picked orbit to a **1,000-marble
+regression guard** (no production key may show a short cycle within budget).
+
+**The honest rule (the veteran's "max data per key").** Publish the true period (√M ≈ 2³⁰) and **rekey /
+refresh the nonce well before ~1 GB per key** in the single-map streaming mode; prefer the 3-map and/or
+CTR construction, which already neutralise the √M ceiling. Status unchanged: **UNVETTED**, deployed only
+as the *outer* wall over a vetted AEAD — exactly where an honest soft spot like this is acceptable.
+
 ## Reproduce
 
 ```bash
@@ -316,6 +366,7 @@ python auth_keyexchange.py             # v8 authenticated DH "secret handshake" 
 python attacks/auth_dh_mitm.py         # v8 same MITM as attack 3, now DEFEATED
 bash bench/randomness.sh /tmp/ks.bin 100   # dumps 100 MB of the shipped keystream + ent
 python tests/test_period.py
+python attacks/period_census.py all    # v9 period census: full census + trap hunt (2^61) + scaling law
 python tests/test_avalanche.py
 python bench/nist_lite.py
 python attacks/two_time_pad.py
