@@ -21,7 +21,9 @@ with user (Suggestion 1 → 2 → 3):
 - [x] **Suggestion 3 — DH authentication** (`auth_keyexchange.py`, REPORT v8). DONE & merged to main.
       Triple-DH (static+ephemeral, Noise/X3DH pattern): session key mixes ee + es + se, so a MITM lacking a
       party's static private can't derive it. `attacks/auth_dh_mitm.py` shows the old MITM now FAILS. 71/71 tests pass.
-- [ ] **Specify the Option-B integration contract** with AsturAI: where the chaos layer sits, what vetted AEAD it wraps, the order of operations. ← NEXT after merging Suggestion 3 (the bridge to real use).
+- [ ] 🅿️ **PARKED (2026-06-06, user's request) — the AsturAI "Option-B" bridge.** Specify the integration
+      contract: where the chaos layer sits, what vetted AEAD it wraps, the order of operations. Deliberately
+      deferred — user has more questions about the cipher itself first. Pick this up when they say so.
 - [ ] (Deferred) Heavyweight randomness (dieharder/PractRand) — decided against 2026-06-06 unless explicitly wanted; randomness ≠ security.
 
 Optional capability polish (no security claim, lower priority):
