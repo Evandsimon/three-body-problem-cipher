@@ -1,6 +1,6 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-06 | Branch: multi-map | Status: v3 multi-map proven (branch, pre-merge)
+Last updated: 2026-06-06 | Branch: ctr-mode | Status: v4 seekable CTR built & proven (branch, pre-merge); v3 multi-map merged to main
 
 ## 🎯 Goal
 Build and **rigorously prove/disprove** a chaos-based stream cipher (integer PWLCM keystream)
@@ -9,12 +9,12 @@ real standards. Engine-first; any real application is deferred until the evidenc
 (and even then, only as a layer over a vetted primitive).
 
 ## ⏭️ NEXT
-- [ ] **Merge `multi-map` → `main`** when ready (branch 1 proven; awaiting go-ahead).
-- [ ] **Branch 2 — CTR-style seekable mode**: keystream addressable by counter for random-access.
-- [ ] **Branch 3 — Key-exchange layer**: let Alice & Bob agree a key without pre-sharing.
+- [ ] **Merge `ctr-mode` → `main`** when ready (branch 2 proven; awaiting go-ahead).
+- [ ] **Branch 3 — Key-exchange layer**: let Alice & Bob agree a key without pre-sharing (DH-style).
+- [ ] (Optional) Wire `SeekableCTR` into `aead.py` as a selectable mode for large-file random access.
 - [ ] Install `ent` + `dieharder` (`brew install ent dieharder`) and run the full randomness battery on ≥100 MB.
 
-✅ Branch 1 (combine multiple chaotic maps) — DONE, see below.
+✅ Branch 1 (multi-map) merged to `main`. ✅ Branch 2 (seekable CTR) DONE, see below.
 
 ## What It Does
 Pure-integer PWLCM (modulus `M = 2^61 - 1`) generates a deterministic, cross-machine keystream;
@@ -46,6 +46,20 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 - ⚠️ ~700–800× slower than AES/ChaCha. **Still UNVETTED** — not for real data.
 
 ## Recent Work
+
+### ✅ DONE 2026-06-06: Branch 2 — seekable CTR mode (`SeekableCTR`) — built & PROVEN
+> Merged Branch 1 (`multi-map`) to `main` first (fast-forward `438b7a8`). Then built `ctr.py`:
+> counter mode over the 3-map keystream. The stream is cut into `BLOCK_SIZE` (64B) blocks; block
+> *i* is derived independently from `(master_key, nonce, block_index=i)` via the same
+> domain-separated SHA-512 KDF (counter folded in) — the AES-CTR construction with the 3-map chaos
+> keystream as the PRF. **Win:** `keystream(n, offset=k)` returns global bytes `k..k+n-1` directly,
+> so any position is O(1) random-access (decrypt the middle of a file / parallelize) instead of
+> spooling from byte 0. **Proof:** `tests/test_ctr.py` (10 new) — windowed reads equal the
+> full-stream slice across block boundaries; reading at position 1,000,000 derives **one** block,
+> not a million. 35/35 tests pass. Cost: CTR ≈ 1.2× slower than streaming 3-map (~0.64 MB/s) — the
+> honest price of seekability. Blocks are domain-separated (more separation than the streaming
+> single-orbit map). REPORT v4 frames it as a **capability** upgrade, not a security claim — it
+> inherits the chaos security unchanged. Committed `0810174` on branch `ctr-mode`, pushed, pre-merge.
 
 ### ✅ DONE 2026-06-06: Branch 1 — multi-map (3 independent PWLCMs) — weak spot fixed & PROVEN
 > Implemented the "three-body" idea as **3 independent PWLCM maps XOR-combined** (`multimap.py`,
