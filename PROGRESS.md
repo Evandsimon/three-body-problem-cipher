@@ -1,6 +1,6 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-06 | Branch: auth-dh-handshake (pre-merge) | Status: 🔬 SECURITY-HARDENING PHASE — **all 3 hardening suggestions DONE.** Suggestion 1 (cryptanalysis) + Suggestion 2 (SIV seatbelt) merged to main; Suggestion 3 (authenticated DH / "secret handshake") DONE & measured: built `auth_keyexchange.py` — triple-DH (static+ephemeral, Noise/X3DH pattern); the active man-in-the-middle that broke plain DH now FAILS automatically. 71/71 tests pass. Resume point: decide merge to main, then specify the **Option-B integration contract** with AsturAI (where the chaos layer sits over a vetted AEAD). End-goal unchanged: harden, then deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data.
+Last updated: 2026-06-06 | Branch: main | Status: 🔬 SECURITY-HARDENING PHASE COMPLETE — **all 3 hardening suggestions DONE & merged to main** (`cdc598c`). Suggestion 1 (cryptanalysis), Suggestion 2 (SIV seatbelt), Suggestion 3 (authenticated DH / "secret handshake" — triple-DH, Noise/X3DH; the active man-in-the-middle that broke plain DH now FAILS automatically). 71/71 tests pass. Resume point: specify the **Option-B integration contract** with AsturAI (where the chaos layer sits as the outer wrap over a vetted AEAD). End-goal unchanged: deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data — never the only lock.
 
 ## 🎯 Goal
 Build and **rigorously prove/disprove** a chaos-based stream cipher (integer PWLCM keystream)
@@ -18,7 +18,7 @@ with user (Suggestion 1 → 2 → 3):
 - [x] **Suggestion 2 — nonce-misuse resistance** ("the seatbelt", `siv.py`, REPORT v7). DONE, pre-merge on `nonce-misuse-siv`.
       Deterministic SIV AEAD: IV = HMAC(K, aad‖plaintext) used as both keystream IV and auth tag. No nonce to reuse;
       different messages never share a keystream (C0⊕C1=M0⊕M1 two-time-pad equality no longer holds). 61/61 tests pass.
-- [x] **Suggestion 3 — DH authentication** (`auth_keyexchange.py`, REPORT v8). DONE, pre-merge on `auth-dh-handshake`.
+- [x] **Suggestion 3 — DH authentication** (`auth_keyexchange.py`, REPORT v8). DONE & merged to main.
       Triple-DH (static+ephemeral, Noise/X3DH pattern): session key mixes ee + es + se, so a MITM lacking a
       party's static private can't derive it. `attacks/auth_dh_mitm.py` shows the old MITM now FAILS. 71/71 tests pass.
 - [ ] **Specify the Option-B integration contract** with AsturAI: where the chaos layer sits, what vetted AEAD it wraps, the order of operations. ← NEXT after merging Suggestion 3 (the bridge to real use).
