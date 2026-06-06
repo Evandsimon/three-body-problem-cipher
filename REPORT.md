@@ -207,6 +207,30 @@ generator," not "secure cipher." Still UNVETTED.
 they require a source build. `ent` on 100 MB is already a credible randomness verdict, and no
 statistical battery can certify *security* regardless.
 
+## v6 update — "clever-burglar" cryptanalysis of the 3-map combiner (`attacks/core_cryptanalysis.py`)
+
+`known_plaintext.py` Part C only ran the *naive* single-map attack at the combiner and showed it
+fails — that proves the combiner beats the *obvious* attack, not that it is strong. v6 sends three
+attacks actually designed for a combiner and **measures** the outcome (break-and-measure, not assert).
+
+| Attack | What it tried | Result |
+|---|---|---|
+| **A. Distinguisher / bias hunt** | Per-bit bias, byte-value χ², byte serial-correlation (lags 1–8), and a 104-mask linear-parity battery on the shipped keystream — the fine structure an invertible affine map might leak (beyond what bulk `ent` sees). | ✅ **Clean.** Strongest deviation **2.52 σ** over ~121 tests (normal for that many tests). No exploitable linear bias found at this scale. |
+| **B. Independence / sync check** | Sub-map↔combined and sub-map↔sub-map correlation + a byte-collision sync detector — does any map leak into the output, or do the maps drift into step (chaos synchronization)? | ✅ **Independent.** Strongest deviation **1.71 σ**. Confirms the "uncoupled by design" claim empirically — no leak, no sync. |
+| **C. Meet-in-the-middle (MITM)** | The clever combiner attack: guess two maps, the third's output is **forced** (`b₃ = ks ⊕ b₁ ⊕ b₂`) and looked up in a precomputed table of its states. Run on small-modulus clones; verified it predicts **unseen** future keystream. | ⚠️ **Real finding.** Succeeds at small scale (M=2⁸/2¹⁰/2¹²) and shows the combiner's true search space is **2^(2·state)**, not 2^(3·state). |
+
+**The honest correction (Part C):** the v3 report estimated joint brute-force at ~**2^159** ("3× the
+hidden state"). MITM shows the real cost is ~**2^(2·61) = 2^122** — guessing two maps fixes the third
+for free. This is **~2^37× weaker than previously claimed.** It does **not** change the verdict:
+2^122 is still astronomically beyond any attacker, so the cipher remains "safe by key-size" — but the
+*honest* number is 2^122, and a *cleverer* attack (correlation/algebraic) could in principle do better.
+A self-inflicted test bug (degenerate masks selecting a bit XOR'd with itself → a fake 547 σ) was
+caught and fixed during the run — a reminder that distinguishers must be built carefully.
+
+**Net:** two of three clever attacks found nothing (good evidence); the third tightened our own
+overclaim downward. Still **UNVETTED** — this is one careful round of self-attack, not public
+cryptanalysis.
+
 ## Reproduce
 
 ```bash
@@ -215,6 +239,7 @@ pytest tests/ -v
 python ctr.py
 python keyexchange.py
 python attacks/dh_mitm.py
+python attacks/core_cryptanalysis.py   # v6 clever-burglar cryptanalysis (bias hunt + independence + MITM)
 bash bench/randomness.sh /tmp/ks.bin 100   # dumps 100 MB of the shipped keystream + ent
 python tests/test_period.py
 python tests/test_avalanche.py

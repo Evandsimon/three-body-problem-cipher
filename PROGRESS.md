@@ -1,6 +1,6 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-06 | Branch: main | Status: 🔬 SECURITY-HARDENING PHASE — original roadmap (multi-map → CTR → key-exchange) is COMPLETE and proven; now entering a deliberate phase to *strengthen the cipher's security* so it can later serve as the **outer layer over a vetted primitive** ("Option B") protecting AsturAI client data. Resume point: pick the concrete hardening target (see NEXT).
+Last updated: 2026-06-06 | Branch: core-cryptanalysis (pre-merge) | Status: 🔬 SECURITY-HARDENING PHASE — Suggestion 1 (clever-burglar cryptanalysis) DONE & measured: 2 of 3 clever attacks found nothing, the 3rd (MITM) honestly corrected combiner strength 2^159 → ~2^122. Resume point: decide merge to main, then Suggestion 2 (nonce-misuse resistance / "the seatbelt"). End-goal unchanged: harden, then deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data.
 
 ## 🎯 Goal
 Build and **rigorously prove/disprove** a chaos-based stream cipher (integer PWLCM keystream)
@@ -11,11 +11,13 @@ real standards. Engine-first; any real application is deferred until the evidenc
 ## ⏭️ NEXT
 **New phase (2026-06-06): strengthen the cipher's security**, then deploy as the *outer* layer over a
 vetted primitive ("Option B" / defense-in-depth) to protect AsturAI client data — never the only lock.
-Each hardening idea must be *measured/attacked*, not asserted (project ethos). Immediate task: pick the
-concrete target. Candidates to weigh (deep-dive pending):
-- [ ] DH **authentication** layer (fingerprint/signature) — close the demonstrated MITM gap in `attacks/dh_mitm.py`.
-- [ ] **Per-component cryptanalysis resistance** beyond the naive per-map attack already defeated (the real open weakness — invertibility/structure of the PWLCM branches).
-- [ ] **Nonce-misuse resistance** (SIV-style construction) — remove the last footgun even if a nonce repeats.
+Each hardening idea must be *measured/attacked*, not asserted (project ethos). Three-step plan agreed
+with user (Suggestion 1 → 2 → 3):
+- [x] **Suggestion 1 — clever-burglar cryptanalysis** (`attacks/core_cryptanalysis.py`, REPORT v6). DONE.
+      Bias hunt = clean (2.52 σ), independence = confirmed (1.71 σ), MITM = honest correction 2^159→~2^122.
+- [ ] **Suggestion 2 — nonce-misuse resistance** ("the seatbelt"): SIV-style construction so a repeated
+      nonce can no longer cause a two-time-pad break. ← NEXT after merging Suggestion 1.
+- [ ] **Suggestion 3 — DH authentication** (fingerprint/signature) — close the MITM gap in `attacks/dh_mitm.py`.
 - [ ] Specify the **Option-B integration contract** with AsturAI: where the chaos layer sits, what vetted AEAD it wraps, the order of operations.
 - [ ] (Deferred) Heavyweight randomness (dieharder/PractRand) — decided against 2026-06-06 unless explicitly wanted; randomness ≠ security.
 
@@ -58,6 +60,20 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 - ⚠️ ~700–800× slower than AES/ChaCha. **Still UNVETTED** — not for real data.
 
 ## Recent Work
+
+### ✅ DONE 2026-06-06: Suggestion 1 — "clever-burglar" cryptanalysis of the 3-map combiner
+> Branch `core-cryptanalysis`. Built `attacks/core_cryptanalysis.py`: three attacks designed for a
+> COMBINER (the old `known_plaintext.py` Part C only tried the naive single-map attack), each
+> *measured*. **A — bias hunt:** per-bit bias, byte χ², serial corr (lags 1–8), 104-mask linear-parity
+> battery on the shipped keystream → strongest 2.52 σ over ~121 tests = looks random, no exploitable
+> bias. (First run reported a fake 547 σ from a self-inflicted bug — masks XOR'ing a bit with itself;
+> caught + fixed, then clean.) **B — independence/sync:** sub-map↔combined & sub-map↔sub-map corr +
+> sync detector → max 1.71 σ = maps truly independent, no chaos-sync. **C — meet-in-the-middle:** guess
+> 2 maps, 3rd is forced + table-looked-up; succeeds at small scale (predicts unseen keystream) and
+> shows real search space is 2^(2·state) **not** 2^(3·state) → honest correction of REPORT's 2^159 to
+> ~**2^122** (~2^37× weaker than claimed, still astronomically safe). REPORT.md **v6** section added.
+> Verdict unchanged: UNVETTED — 2/3 clever attacks found nothing, the 3rd tightened our own overclaim.
+> The project got stronger by attacking itself. Pre-merge on `core-cryptanalysis`.
 
 ### ✅ DECISION 2026-06-06: Next-phase direction set — harden, then Option B for AsturAI
 > Strategic decision, no code yet. The completed roadmap left the project at a "clean stop"; the user
