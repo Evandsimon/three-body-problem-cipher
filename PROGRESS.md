@@ -1,6 +1,6 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-06 | Branch: main | Status: roadmap COMPLETE (multi-map → CTR → key-exchange); 100 MB randomness battery passed
+Last updated: 2026-06-06 | Branch: main | Status: ✅ COMPLETE — roadmap (multi-map → CTR → key-exchange) done, 100 MB randomness battery passed. Resume point: project at a clean stopping place; only optional polish remains (see NEXT).
 
 ## 🎯 Goal
 Build and **rigorously prove/disprove** a chaos-based stream cipher (integer PWLCM keystream)
@@ -11,7 +11,10 @@ real standards. Engine-first; any real application is deferred until the evidenc
 ## ⏭️ NEXT
 The original three-branch roadmap is **COMPLETE** (multi-map → CTR → key-exchange). Remaining is
 optional polish, no new security claims:
-- [ ] (Optional) Heavyweight randomness: build `dieharder`/PractRand from source (both removed from Homebrew) and run on the 100 MB dump.
+- ~~Heavyweight randomness (dieharder/PractRand)~~ — **DECIDED AGAINST 2026-06-06.** Both removed
+  from Homebrew (source build of third-party code only); and no statistical battery can certify
+  *security* anyway (Mersenne Twister passes them and is broken). The `ent` 100 MB result is a
+  sufficient randomness verdict. Revisit only if explicitly wanted.
 - [ ] (Optional) Wire `SeekableCTR` into `aead.py` as a selectable mode for large-file random access.
 - [ ] (Optional) Add an authentication layer over DH (fingerprint/signature) to close the MITM gap shown in `attacks/dh_mitm.py`.
 
