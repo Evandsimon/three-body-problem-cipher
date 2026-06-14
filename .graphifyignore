@@ -1,0 +1,46 @@
+# ── graphify ingestion policy (workspace brain). Built-ins already skip
+# node_modules/.venv/.git/dist/build/__pycache__ and treat .env*/*.key/*.pem/
+# *secret*/*token* as sensitive. This file ADDS data/media/generated walls and
+# REPLACES .gitignore at this root. ──
+
+# ── Projects/chaos-cipher project-specific ──
+*.bin
+# ── Tooling / cache / config noise (shared signature) ──
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.serena/
+.cursor/
+.claude/
+.agents/
+.DS_Store
+*.lock
+skills-lock.json
+# ── Media & design binaries — vision is the costly step; architecture lives in
+#    code + text docs (shared signature; re-add specific diagrams later if wanted). ──
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.ico
+*.bmp
+*.tif
+*.tiff
+*.mp4
+*.webm
+*.mkv
+*.mov
+*.avi
+*.m4v
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.aiff
+*.flac
+*.ogg
+*.psd
+*.ai
+*.sketch

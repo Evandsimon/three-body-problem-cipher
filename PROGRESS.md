@@ -2,6 +2,8 @@
 
 Last updated: 2026-06-06 | Branch: period-census (pre-merge) | Status: 🔬 **v9 PERIOD CENSUS DONE** — answered the veteran's make-or-break question (§2). Honest finding: the map is a **random function**, so period ≈ **√M ≈ 2³⁰, NOT 2⁶¹** (rho/birthday law, measured exponent 0.489). **No traps:** 1,000/1,000 production keys + 7 adversarial edges show no short cycle; fixed-point capture ~1e-9 and even then mutes only 1 of the 3 XOR'd maps. Mitigated by the 3-map combiner (lcm ~2⁹⁰) + CTR mode + a per-key data limit. REPORT **v9**; `test_period.py` upgraded to a **1,000-marble guard**. **72/72 tests pass.** (Prior: all 3 hardening suggestions done & merged to main `cdc598c`.) Resume point: 🔖 **SPEED / Rust rewrite** — architecture DECIDED (chaos outer wall + AES inner vault; make the chaos engine itself fast, don't blend AES in); user leaning **Rust** for a fast constant-time core; mid-discussion on the "expert questions" checklist (§2 period = DONE; §4 constant-time + §3 KAT set = pre-port must-dos). See "🔖 RESUME HERE" in NEXT. End-goal unchanged: deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data — never the only lock.
 
+> 📓 Older work-log entries trimmed for brevity — full history in git.
+
 ## 🎯 Goal
 Build and **rigorously prove/disprove** a chaos-based stream cipher (integer PWLCM keystream)
 as a research/learning project. "Prove it works" = try hard to break it and measure it against
@@ -226,17 +228,3 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 > verifying work on its own — never bundled into or gating `save`. Updated project `CLAUDE.md` +
 > the `chaos-cipher-save-workflow` memory.
 
-### ✅ DONE 2026-06-06: v2 AEAD shell + GitHub + three-pillar workflow
-> Added weak-parameter **rejection** (`MIN_P` band) + `from_master()` hash KDF (no weak key
-> reachable; the old `key=1,ctrl=1`→period-1 collapse is gone). Added **authentication** via a
-> `seal()`/`open_()` AEAD shell (`aead.py`): fresh random nonce per message (kills two-time-pad
-> in practice) + encrypt-then-MAC (HMAC-SHA256), constant-time verify, AAD binding. 18/18 tests
-> pass (10 new in `test_aead.py`: tamper/truncation/wrong-key/AAD all rejected). Pushed to private
-> repo `Evansimon77/chaos-cipher`; folder renamed `chaos-engine`→`chaos-cipher`. Established the
-> GitHub/Obsidian/PROGRESS three-pillar workflow + the "save" command.
-
-### ✅ DONE 2026-06-06: v1 engine + adversarial harness + honest REPORT
-> Built faithful pure-integer PWLCM cipher + full attack/test harness (period via Brent,
-> avalanche, NIST-lite, two-time-pad, known-plaintext state recovery, speed bench). Verdict in
-> `REPORT.md`: the core idea synchronizes across machines, but the strong "unhackable" claims
-> don't survive contact with real attacks. Decision: engine-first, app deferred, evidence-driven.

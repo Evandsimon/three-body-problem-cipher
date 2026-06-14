@@ -24,3 +24,6 @@ dist/
 .venv/
 venv/
 env/
+
+# Generated graphify knowledge-graph output (~10MB, regenerable via /graphify)
+graphify-out/
