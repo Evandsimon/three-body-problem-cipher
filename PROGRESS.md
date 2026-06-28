@@ -1,6 +1,6 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-28 | Branch: branchless-core | Status: 🛠️ **MAX-SECURITY REBUILD IN PROGRESS** — no-compromise path. **🎉 PHASE 1 COMPLETE.** **Phase 2 IN PROGRESS** (2/5 items): **(D) new differential/correlation tooling done** (`attacks/differential_attack.py`) — attacks the brand-new output path (127→64 fold, fmix64 mixer, top-32 truncation); all four parts pass *at the chance noise floor* (every state bit avalanches, fold carries the top half P∈[0.470,0.528], no usable differential, truncation wall leaks nothing, 2^(w/2) preimage law confirmed). **Existing attacks re-run + honestly relabeled done** — all survive the new 4-map/2^127 design; the meet-in-the-middle in `core_cryptanalysis.py` was GENERALIZED from hardcoded-3-map to a balanced N-map split → honest cost ~2^254 time+memory (was the stale 2^122); `known_plaintext.py`/`output_filter.py` labels corrected. 81/81 tests. **Still to do: new period census on 2^127, TMTO/state-size, #7 PractRand.** **Phase 0 done** (branchless constant-time map). **Phase 1 #3/#4 done** (frosted-glass nonlinear output + multi-byte). **Phase 1 #1 done TODAY** (bigger grid 2^61→2^127): per-map period lifted ~2^30 → ~2^62 (√M law, measured exponent 0.489). The edge census CAUGHT a real bug #1 introduced — a degenerate all-zero key fell into a 6-step short cycle because nonce=0 collapsed the init mixing to `x=key+1` (a tiny start state that resonates with the map). FIXED by an unconditional avalanche in the init so any key→strong x0; re-verified 0/7 short cycles, 72/72 tests, all 4 filter attacks pass, bias clean. **Phase 1 #2 done TODAY** (map count 3→**4**): chose 4 after measuring — sub-maps proven independent (worst pairwise corr 0.008), combined output clean at N=3/4/5, cost ~linear (4 = 1.3× the 3-map time), work-factor at N=4 ~2^252 period / ~2^508 joint state. Stopped at 4 not 5+ because all maps share the master key, so key/KDF — not map count — is the real ceiling. New validation: `attacks/map_count_attack.py`. **Phase 1 A (auto-rekey ratchet) done TODAY** — new `ratchet.py`: one-way HMAC-SHA256 key chain re-keys every 64 KiB and burns the old key. Gives **forward secrecy** (a key leak can't decrypt past epochs — demonstrated) + **dissolves the period limit** (each epoch is a fresh ~2^252 orbit; usable length effectively unbounded). Validated `attacks/ratchet_attack.py` (forward secrecy PASS, epochs independent, no re-key seam — after fixing a too-strict seam test that cried wolf on sampling noise). 81/81 tests. **🎉 PHASE 1 COMPLETE. Next: Phase 2 — attack the whole new design HARD.** See "🗺️ MASTER ROADMAP".
+Last updated: 2026-06-28 | Branch: branchless-core | Status: 🛠️ **MAX-SECURITY REBUILD IN PROGRESS** — no-compromise path. **🎉 PHASE 1 COMPLETE.** **Phase 2 IN PROGRESS** (4/5 items; only #7 heavy randomness left): **(D) new differential/correlation tooling done** (`attacks/differential_attack.py`) — attacks the brand-new output path (127→64 fold, fmix64 mixer, top-32 truncation); all four parts pass *at the chance noise floor* (every state bit avalanches, fold carries the top half P∈[0.470,0.528], no usable differential, truncation wall leaks nothing, 2^(w/2) preimage law confirmed). **Existing attacks re-run + honestly relabeled done** — all survive the new 4-map/2^127 design; the meet-in-the-middle in `core_cryptanalysis.py` was GENERALIZED from hardcoded-3-map to a balanced N-map split → honest cost ~2^254 time+memory (was the stale 2^122); `known_plaintext.py`/`output_filter.py` labels corrected. **New period census on 2^127 + TMTO check done** (`period_census.py`): √M law holds (per-map ~2^62, 4-map combined ~2^247), 0 traps/300 keys, 0/7 edges, tiny-cycles are a small-grid artifact (now reported as a trend); NEW Part E TMTO is honest two-sided — 2^254 worst case (2 bits under 256, so publish ~254-bit), 2^504 realistic, data starved by auto-rekey. 81/81 tests. **Only #7 heavy randomness (PractRand/dieharder) left in Phase 2.** **Phase 0 done** (branchless constant-time map). **Phase 1 #3/#4 done** (frosted-glass nonlinear output + multi-byte). **Phase 1 #1 done TODAY** (bigger grid 2^61→2^127): per-map period lifted ~2^30 → ~2^62 (√M law, measured exponent 0.489). The edge census CAUGHT a real bug #1 introduced — a degenerate all-zero key fell into a 6-step short cycle because nonce=0 collapsed the init mixing to `x=key+1` (a tiny start state that resonates with the map). FIXED by an unconditional avalanche in the init so any key→strong x0; re-verified 0/7 short cycles, 72/72 tests, all 4 filter attacks pass, bias clean. **Phase 1 #2 done TODAY** (map count 3→**4**): chose 4 after measuring — sub-maps proven independent (worst pairwise corr 0.008), combined output clean at N=3/4/5, cost ~linear (4 = 1.3× the 3-map time), work-factor at N=4 ~2^252 period / ~2^508 joint state. Stopped at 4 not 5+ because all maps share the master key, so key/KDF — not map count — is the real ceiling. New validation: `attacks/map_count_attack.py`. **Phase 1 A (auto-rekey ratchet) done TODAY** — new `ratchet.py`: one-way HMAC-SHA256 key chain re-keys every 64 KiB and burns the old key. Gives **forward secrecy** (a key leak can't decrypt past epochs — demonstrated) + **dissolves the period limit** (each epoch is a fresh ~2^252 orbit; usable length effectively unbounded). Validated `attacks/ratchet_attack.py` (forward secrecy PASS, epochs independent, no re-key seam — after fixing a too-strict seam test that cried wolf on sampling noise). 81/81 tests. **🎉 PHASE 1 COMPLETE. Next: Phase 2 — attack the whole new design HARD.** See "🗺️ MASTER ROADMAP".
 
 ---
 Prior status: 🔬 **v9 PERIOD CENSUS DONE** — answered the veteran's make-or-break question (§2). Honest finding: the map is a **random function**, so period ≈ **√M ≈ 2³⁰, NOT 2⁶¹** (rho/birthday law, measured exponent 0.489). **No traps:** 1,000/1,000 production keys + 7 adversarial edges show no short cycle; fixed-point capture ~1e-9 and even then mutes only 1 of the 3 XOR'd maps. Mitigated by the 3-map combiner (lcm ~2⁹⁰) + CTR mode + a per-key data limit. REPORT **v9**; `test_period.py` upgraded to a **1,000-marble guard**. **72/72 tests pass.** (Prior: all 3 hardening suggestions done & merged to main `cdc598c`.) Resume point: 🔖 **SPEED / Rust rewrite** — architecture DECIDED (chaos outer wall + AES inner vault; make the chaos engine itself fast, don't blend AES in); user leaning **Rust** for a fast constant-time core; mid-discussion on the "expert questions" checklist (§2 period = DONE; §4 constant-time + §3 KAT set = pre-port must-dos). See "🔖 RESUME HERE" in NEXT. End-goal unchanged: deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data — never the only lock.
@@ -53,8 +53,16 @@ let strangers attack it.** Never speed up or ship a design that isn't finalized 
         → honest cost ~2^254 time+memory (was the stale 2^122). `known_plaintext.py` Part C → 4 maps,
         naive joint ~2^508 / MITM ~2^254. `output_filter.py` Part 4 label → 4-map. (period_census is
         the separate item below.)
-  - [ ] New period census on the bigger grid; state-size/TMTO check; **#7 heavy randomness**
-        (PractRand/dieharder).
+  - [x] New period census on the bigger grid + state-size/TMTO check — DONE 2026-06-28
+        (`attacks/period_census.py`, relabeled 2^61→2^127 / 3-map→4-map, re-run on the real grid).
+        Part A full census: tiny-cycle basins are a SMALL-GRID artifact that shrinks with the grid
+        (100%@2^13 → 0.04%@2^21; now reported as a trend + ok-band vs rejected-edge split, fixing a
+        misleading single-max). Part B: 0 traps / 300 production keys at 2^127. Part C: 0/7 adversarial
+        edges (confirms the init-avalanche fix holds). Part D: √M law holds (exp 0.489) → per-map
+        period ~2^62, 4-map combined ~2^247. NEW Part E (TMTO): honest two-sided — worst case (p known)
+        508-bit state → 2^254 (2 bits under a strict 256-bit claim; publish ~254-bit, matching the
+        MITM), realistic (p secret) ~1008-bit → 2^504; auto-rekey starves TMTO data by 2^238 either way.
+  - [ ] **#7 heavy randomness** (PractRand/dieharder) — last Phase-2 item.
 - [ ] **Phase 3 — Freeze + write the contract:**
   - [ ] **E. Threat-model + bit-security claim** (one page). [ ] **§3 KAT** frozen vectors.
         [ ] Constant-time spec (map done + reciprocal-division plan).
@@ -152,6 +160,27 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 - ⚠️ ~700–800× slower than AES/ChaCha. **Still UNVETTED** — not for real data.
 
 ## Recent Work
+
+### ✅ DONE 2026-06-28: Phase 2 — new period census on the 2^127 grid + TMTO/state-size check
+> Branch `branchless-core`. Third Phase-2 item. Re-ran `attacks/period_census.py` on the finalized
+> 2^127 / 4-map design (relabeled the stale 2^61 / 3-map prints) and added a new TMTO part.
+> **Part A (full census, small scale):** found and FIXED a misleading summary — the old "worst tiny
+> basin" lumped the REJECTED edge-p values in with the real accepted band. Split them; the honest
+> accepted-band worst is a SMALL-GRID artifact that shrinks as the grid grows (100%@2^13 → 38% → 0.68%
+> → 5% → 0.04%@2^21), now shown as a trend table, not a scary single max. **Part B (real grid):** 0
+> traps among 300 production-seeded keys at 2^127 (budget 60k steps). **Part C (edges):** 0/7 adversarial
+> inputs short-cycle — confirms the init-avalanche fix (that closed the degenerate-key 6-cycle #1
+> introduced) still holds. **Part D (scaling law):** the √M random-function law holds, fitted exponent
+> 0.489 → extrapolated per-map period ~2^62, 4-map combined (lcm) ~2^247 (flagged honestly as a ~90-bit
+> extrapolation beyond the measured k≤37, a trend not a measurement). **Part E (NEW — TMTO/state-size):**
+> a generic time-memory trade-off breaks a stream cipher at ~2^(state/2). Reported two-sided and
+> honestly: worst case (break-point p assumed KNOWN) hidden state = 508 bits → TMTO ~2^254 — which is
+> 2 bits UNDER a strict 256-bit claim, so the honest bit-security to publish is ~254 (matching the MITM),
+> not a round 256; realistic case (p is secret, ~125 bits/map) → ~1008-bit secret → TMTO ~2^504, clearing
+> the 512-bit rule comfortably; and auto-rekey (item A) starves the DATA a TMTO needs by ~2^238 either
+> way. Noted N=5 maps would lift the worst case to 2^317 if a clean ≥256 margin is ever required.
+> **81/81 tests.** Honest scope: this is a generic-bound + structural census, NOT a proof; PWLCM's
+> affine structure could admit a data-cheaper attack. Still UNVETTED. **Next: #7 heavy randomness.**
 
 ### ✅ DONE 2026-06-28: Phase 2 — honest re-run of every existing attack vs the new design
 > Branch `branchless-core`. Second Phase-2 item. Re-ran the whole attack suite against the finalized
