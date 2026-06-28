@@ -30,25 +30,50 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _frozen_engine_raw():
+def _frozen(key):
     with open(_VECTORS) as f:
-        return json.load(f)["engine_raw"]
+        return json.load(f)[key]
 
 
-def _rust_keystream(seed: str, control: str, nonce: str, n: int) -> str:
+def _frozen_engine_raw():
+    return _frozen("engine_raw") if _have_binary() else []
+
+
+def _frozen_multimap():
+    return _frozen("multimap") if _have_binary() else []
+
+
+def _rust(*cli_args) -> str:
     out = subprocess.run(
-        [_BIN, "ks", seed, control, nonce, str(n)],
+        [_BIN, *[str(a) for a in cli_args]],
         capture_output=True, text=True, check=True,
     )
     return out.stdout.strip()
 
 
-@pytest.mark.parametrize("case", _frozen_engine_raw() if _have_binary() else [],
-                         ids=lambda c: c["label"])
+@pytest.mark.parametrize("case", _frozen_engine_raw(), ids=lambda c: c["label"])
 def test_rust_matches_kat_engine_raw(case):
     n = len(bytes.fromhex(case["keystream"]))
-    got = _rust_keystream(case["seed"], case["control"], case["nonce"], n)
+    got = _rust("ks", case["seed"], case["control"], case["nonce"], n)
     assert got == case["keystream"], (
         f"Rust core diverged from the frozen KAT for case '{case['label']}'. "
         "The port is NOT bit-identical."
+    )
+
+
+def test_rust_matches_kat_from_master():
+    """The seed KDF (SHA-512 -> seed/control, reduced mod M / HALF) + single engine."""
+    case = _frozen("from_master")
+    n = len(bytes.fromhex(case["keystream"]))
+    got = _rust("from_master", case["key"], case["nonce"], n)
+    assert got == case["keystream"], "Rust from_master KDF diverged from the frozen KAT."
+
+
+@pytest.mark.parametrize("case", _frozen_multimap(), ids=lambda c: f"n_maps={c['n_maps']}")
+def test_rust_matches_kat_multimap(case):
+    """The shipped keystream: N independent maps (multimap KDF, index-folded) XOR-combined."""
+    n = len(bytes.fromhex(case["keystream"]))
+    got = _rust("multimap", case["key"], case["nonce"], case["n_maps"], n)
+    assert got == case["keystream"], (
+        f"Rust multimap (n_maps={case['n_maps']}) diverged from the frozen KAT."
     )

@@ -30,6 +30,7 @@
 //!   q-1 or q, never less and never more. The frozen KAT guarantees this stays bit-identical to Python.
 
 use ruint::aliases::U256;
+use sha2::{Digest, Sha512};
 
 // ---- grid constants (mirror engine.py exactly) ----
 pub const M: u128 = (1u128 << 127) - 1; // Mersenne prime M127
@@ -249,6 +250,73 @@ impl ChaosEngine {
             out.push(self.next_byte());
         }
         out
+    }
+
+    /// KDF constructor — mirror of engine.py `DiscreteChaoticEngine.from_master`.
+    /// seed_key/control come from SHA-512 over a domain-separated message, reduced exactly as the
+    /// engine reduces them, then nonce=0 (the public nonce is already folded into the hash).
+    pub fn from_master(master_key: &[u8], nonce: &[u8]) -> Self {
+        let h = kdf_hash(b"chaos-pwlcm-v1|seed|", None, master_key, nonce);
+        let (seed, control) = derive_seed_control(&h);
+        ChaosEngine::new(seed, control, 0)
+    }
+}
+
+/// SHA-512 over `prefix [|| index_be(2)] || master_key || b"|" || nonce`. The `|seed|` domain
+/// (from_master) passes no index; the `|multimap|` domain passes the 2-byte big-endian map index —
+/// matching engine.py / multimap.py byte-for-byte.
+fn kdf_hash(prefix: &[u8], index: Option<u16>, master_key: &[u8], nonce: &[u8]) -> [u8; 64] {
+    let mut hasher = Sha512::new();
+    hasher.update(prefix);
+    if let Some(i) = index {
+        hasher.update(i.to_be_bytes());
+        hasher.update(b"|");
+    }
+    hasher.update(master_key);
+    hasher.update(b"|");
+    hasher.update(nonce);
+    hasher.finalize().into()
+}
+
+/// Parse h[0:24] and h[24:48] as 192-bit big-endian integers and reduce them for the engine:
+/// seed mod M, control mod HALF. Idempotent with ChaosEngine::new's own `% M` / `% HALF`, so the
+/// 192-bit KDF output lands on exactly the same state as the Python reference.
+fn derive_seed_control(h: &[u8; 64]) -> (u128, u128) {
+    let seed = lo128(U256::from_be_slice(&h[0..24]) % u(M));
+    let control = lo128(U256::from_be_slice(&h[24..48]) % u(HALF));
+    (seed, control)
+}
+
+/// The shipped keystream: N INDEPENDENT PWLCM engines XOR-combined (mirror of multimap.py).
+/// Each sub-engine gets an unrelated (seed, control) from a domain-separated, index-folded KDF.
+pub struct MultiMapEngine {
+    engines: Vec<ChaosEngine>,
+}
+
+impl MultiMapEngine {
+    pub fn new(master_key: &[u8], nonce: &[u8], n_maps: usize) -> Self {
+        assert!(n_maps >= 1, "n_maps must be >= 1");
+        let engines = (0..n_maps)
+            .map(|i| {
+                let h = kdf_hash(b"chaos-pwlcm-v1|multimap|", Some(i as u16), master_key, nonce);
+                let (seed, control) = derive_seed_control(&h);
+                ChaosEngine::new(seed, control, 0)
+            })
+            .collect();
+        MultiMapEngine { engines }
+    }
+
+    #[inline]
+    pub fn next_byte(&mut self) -> u8 {
+        let mut b = 0u8;
+        for eng in self.engines.iter_mut() {
+            b ^= eng.next_byte();
+        }
+        b
+    }
+
+    pub fn keystream(&mut self, n: usize) -> Vec<u8> {
+        (0..n).map(|_| self.next_byte()).collect()
     }
 }
 

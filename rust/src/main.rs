@@ -8,7 +8,25 @@
 
 use std::time::Instant;
 
-use chaos_core::ChaosEngine;
+use chaos_core::{ChaosEngine, MultiMapEngine};
+
+/// Parse a hex byte string (e.g. the KAT key/nonce material) into raw bytes.
+fn parse_hex_bytes(s: &str) -> Vec<u8> {
+    let s = s.trim();
+    assert!(s.len() % 2 == 0, "hex string must have even length");
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).expect("bad hex byte"))
+        .collect()
+}
+
+fn hex_of(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push_str(&format!("{b:02x}"));
+    }
+    out
+}
 
 fn parse_u128(s: &str) -> u128 {
     let s = s.trim();
@@ -30,11 +48,24 @@ fn main() {
             let nonce = parse_u128(&args[4]);
             let n: usize = args[5].parse().expect("bad length");
             let ks = ChaosEngine::new(seed, control, nonce).keystream(n);
-            let mut out = String::with_capacity(n * 2);
-            for b in ks {
-                out.push_str(&format!("{:02x}", b));
-            }
-            println!("{out}");
+            println!("{}", hex_of(&ks));
+        }
+        "from_master" => {
+            // chaos_core from_master <key_hex> <nonce_hex> <n>  -> single-engine keystream via the seed KDF
+            let key = parse_hex_bytes(&args[2]);
+            let nonce = parse_hex_bytes(&args[3]);
+            let n: usize = args[4].parse().expect("bad length");
+            let ks = ChaosEngine::from_master(&key, &nonce).keystream(n);
+            println!("{}", hex_of(&ks));
+        }
+        "multimap" => {
+            // chaos_core multimap <key_hex> <nonce_hex> <n_maps> <n>  -> XOR-combined shipped keystream
+            let key = parse_hex_bytes(&args[2]);
+            let nonce = parse_hex_bytes(&args[3]);
+            let n_maps: usize = args[4].parse().expect("bad n_maps");
+            let n: usize = args[5].parse().expect("bad length");
+            let ks = MultiMapEngine::new(&key, &nonce, n_maps).keystream(n);
+            println!("{}", hex_of(&ks));
         }
         "bench" => {
             let mb: usize = args.get(2).map(|s| s.parse().unwrap()).unwrap_or(64);
@@ -114,6 +145,8 @@ fn main() {
         }
         _ => {
             eprintln!("usage: chaos_core ks <seed> <control> <nonce> <n>");
+            eprintln!("       chaos_core from_master <key_hex> <nonce_hex> <n>");
+            eprintln!("       chaos_core multimap <key_hex> <nonce_hex> <n_maps> <n>");
             eprintln!("       chaos_core bench <mbytes>");
             eprintln!("       chaos_core timing <keys>");
             std::process::exit(2);

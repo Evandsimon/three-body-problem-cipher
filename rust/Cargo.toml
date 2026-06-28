@@ -18,6 +18,10 @@ path = "src/lib.rs"
 # hot loop. Keeping it as a dependency is fine for a research core.
 [dependencies]
 ruint = "1"
+# Vetted SHA-512 for the key-derivation (from_master + multimap KDFs). We do NOT hand-roll the hash —
+# the KDF is the security ceiling, so it uses a standard reviewed implementation, mirroring Python's
+# hashlib.sha512. Only the bespoke chaos math is hand-written; the primitive underneath is not.
+sha2 = "0.10"
 
 [profile.release]
 opt-level = 3
