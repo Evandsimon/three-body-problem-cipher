@@ -193,11 +193,12 @@ def demo_multimap_resists():
 
 
 def extrapolate():
-    state_bits = M.bit_length()              # 61
+    state_bits = M.bit_length()              # 127 at the current grid (#1)
+    half_bits = state_bits - 1
     print("Honest extrapolation to the REAL engine:")
-    print(f"  state size      : ~{state_bits} bits  (M = 2^61 - 1)")
+    print(f"  state size      : ~{state_bits} bits  (M = 2^{state_bits} - 1)")
     print(f"  naive recovery  : ~2^{state_bits - 8} ops with p known "
-          f"(times ~2^60 if p is secret)")
+          f"(times ~2^{half_bits} if p is secret)")
     print("  => This naive known-plaintext attack does NOT break the full engine: the")
     print("     work factor is astronomical. BUT note WHY it's safe — it's a *key-size*")
     print("     argument (big hidden state + secret p), exactly like a normal cipher.")

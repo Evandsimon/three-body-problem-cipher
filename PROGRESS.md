@@ -1,6 +1,6 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-28 | Branch: branchless-core | Status: 🛠️ **MAX-SECURITY REBUILD STARTED** — user chose the no-compromise path (quality over ease). Master roadmap recorded below (7 phases). Phase 0 done (branchless constant-time map, timing-leak #1 blueprint, bit-identical, 72/72). Now in **Phase 1**: building #3 frosted-glass output filter + #4 more-bytes-per-step. See "🗺️ MASTER ROADMAP" section.
+Last updated: 2026-06-28 | Branch: branchless-core | Status: 🛠️ **MAX-SECURITY REBUILD IN PROGRESS** — no-compromise path. **Phase 0 done** (branchless constant-time map). **Phase 1 #3/#4 done** (frosted-glass nonlinear output + multi-byte). **Phase 1 #1 done TODAY** (bigger grid 2^61→2^127): per-map period lifted ~2^30 → ~2^62 (√M law, measured exponent 0.489). The edge census CAUGHT a real bug #1 introduced — a degenerate all-zero key fell into a 6-step short cycle because nonce=0 collapsed the init mixing to `x=key+1` (a tiny start state that resonates with the map). FIXED by an unconditional avalanche in the init so any key→strong x0; re-verified 0/7 short cycles, 72/72 tests, all 4 filter attacks pass, bias clean. **Phase 1 remaining: #2 (map count 3→4/5), A (auto-rekey ratchet).** See "🗺️ MASTER ROADMAP".
 
 ---
 Prior status: 🔬 **v9 PERIOD CENSUS DONE** — answered the veteran's make-or-break question (§2). Honest finding: the map is a **random function**, so period ≈ **√M ≈ 2³⁰, NOT 2⁶¹** (rho/birthday law, measured exponent 0.489). **No traps:** 1,000/1,000 production keys + 7 adversarial edges show no short cycle; fixed-point capture ~1e-9 and even then mutes only 1 of the 3 XOR'd maps. Mitigated by the 3-map combiner (lcm ~2⁹⁰) + CTR mode + a per-key data limit. REPORT **v9**; `test_period.py` upgraded to a **1,000-marble guard**. **72/72 tests pass.** (Prior: all 3 hardening suggestions done & merged to main `cdc598c`.) Resume point: 🔖 **SPEED / Rust rewrite** — architecture DECIDED (chaos outer wall + AES inner vault; make the chaos engine itself fast, don't blend AES in); user leaning **Rust** for a fast constant-time core; mid-discussion on the "expert questions" checklist (§2 period = DONE; §4 constant-time + §3 KAT set = pre-port must-dos). See "🔖 RESUME HERE" in NEXT. End-goal unchanged: deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data — never the only lock.
@@ -26,11 +26,14 @@ let strangers attack it.** Never speed up or ship a design that isn't finalized 
       secret `p`) is NOT fixed here — needs the precomputed-reciprocal trick in Rust (Phase 4).
 
 - [ ] **Phase 1 — Finalize the CORE design** (math changes happen here, together, before freeze/port):
-  - [ ] **#3 Frosted-glass output** — nonlinear ARX finalizer so output can't be rolled back to state
-        (kills the invertibility weakness). ◀ IN PROGRESS
-  - [ ] **#4 More bytes per step** — stop emitting 1 byte per expensive step; safe *because* of #3.
-  - [ ] **#1 Bigger grid (2^127−1)** — per-map period ~2^30 → ~2^63 (erases the headline weakness).
-  - [ ] **#2 Final map count** (3 → 4/5) — pick and lock.
+  - [x] **#3 Frosted-glass output** — nonlinear ARX finalizer so output can't be rolled back to state
+        (kills the invertibility weakness). DONE 2026-06-28, attacked.
+  - [x] **#4 More bytes per step** — stop emitting 1 byte per expensive step; safe *because* of #3.
+        DONE 2026-06-28 (OUTPUT_BYTES_PER_STEP=4; speed win is Rust-only).
+  - [x] **#1 Bigger grid (2^127−1)** — per-map period ~2^30 → ~2^62 (erases the headline weakness).
+        DONE 2026-06-28. Also fixed an init-mixing bug it exposed (degenerate-key short cycle). Note:
+        `_finalize` now XOR-folds the 127-bit state into 64 bits so all bits reach the output.
+  - [ ] **#2 Final map count** (3 → 4/5) — pick and lock. ◀ NEXT
   - [ ] **A. Auto-rekey ratchet** — self-changing lock, burns old keys (forward secrecy + dissolves
         the period limit).
 - [ ] **Phase 2 — Attack our own design HARD** (nothing proceeds unless it survives):
@@ -107,7 +110,7 @@ does NOT change UNVETTED status. See REPORT.md "Randomness battery".
 ✅ Branch 1 (multi-map) merged. ✅ Branch 2 (seekable CTR) merged. ✅ Branch 3 (key-exchange) DONE, see below.
 
 ## What It Does
-Pure-integer PWLCM (modulus `M = 2^61 - 1`) generates a deterministic, cross-machine keystream;
+Pure-integer PWLCM (modulus `M = 2^127 - 1`) generates a deterministic, cross-machine keystream;
 XOR encrypts. An AEAD shell (`aead.py`) wraps it with a fresh random nonce per message +
 encrypt-then-MAC (HMAC-SHA256) so tampering/wrong-keys are rejected. Simple interface:
 `seal(key, msg)` / `open_(key, blob)`.
@@ -136,6 +139,23 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 - ⚠️ ~700–800× slower than AES/ChaCha. **Still UNVETTED** — not for real data.
 
 ## Recent Work
+
+### ✅ DONE 2026-06-28: Phase 1 (#1) — bigger grid 2^61→2^127, period lifted, init bug found & fixed
+> Branch `branchless-core`. Moved the grid from `M = 2^61-1` to **`M = 2^127-1` (Mersenne prime M127)**.
+> **Why:** the honest per-map period is √M (random-function rho law), so a bigger grid is the only lever
+> that raises it. **Measured** the law at small scales (k=21..37, exponent **b=0.489≈0.5**) and extrapolated
+> to the new grid: per-map period **~2^62** (was ~2^30); 3-map XOR combiner ~2^185. Three engine changes:
+> (1) `M`/`HALF`/`DEAD_STATE_FIX` scaled (DEAD is now a 128-bit pattern %M so the escape lands mid-space);
+> (2) `MIN_P` made relative (`HALF>>20`) so the weak-param band scales with the grid; (3) **`_finalize`
+> now XOR-folds the wide state into 64 bits FIRST** — without this the bare 64-bit mask would silently drop
+> the top 63 state bits (caught while designing). **Measure-don't-assert paid off:** the edge census flagged
+> a NEW bug — `key=0/ctrl=0` (and `key=1`) fell into a **6-step short cycle**. Root cause (traced): with
+> nonce=0 the init mixing collapsed to `x = key+1`, a tiny start state that resonates with `p≈M/2^21`.
+> **Fix (chosen by data over 4 variants):** an unconditional 2-round ARX avalanche in `__init__` so ANY
+> (key,nonce) — incl. all-zero — diffuses across the full grid. A "make MIN_P ugly" variant did NOT fix it
+> (proved the tiny x0, not the clean MIN_P, was the cause). **Re-verified:** edge census **0/7** short cycles,
+> **72/72** tests, all **4** filter attacks pass, bias clean (0.93σ, χ²=231, serial -0.0006). Honest scope
+> unchanged: still UNVETTED; this raised the period floor + closed an init footgun, not a proof of security.
 
 ### ✅ DONE 2026-06-28: Phase 0 + Phase 1 (#3, #4) — branchless map + frosted-glass output, attacked
 > Branch `branchless-core`. User chose the **no-compromise, max-security path** and the 7-phase Master

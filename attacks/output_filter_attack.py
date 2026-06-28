@@ -202,5 +202,5 @@ if __name__ == "__main__":
           f"model-sound={r3}  no-new-bias={r4}")
     print("Honest scope: this validates that the filter hides the state from the output and kills")
     print("the known-plaintext anchor + affine shortcut. It is NOT a proof of security — the map")
-    print("stays invertible and the design stays UNVETTED. Next: bigger grid (#1), then Rust.")
+    print("stays invertible and the design stays UNVETTED. Grid is now 2^127 (#1 done); next: Rust.")
     print("=" * 78)

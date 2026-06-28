@@ -3,7 +3,7 @@ Chaos-based stream cipher engine — RESEARCH ARTIFACT, NOT PRODUCTION CRYPTO.
 
 This implements the user's proposed design faithfully: a discretized, pure-integer
 Piecewise Linear Chaotic Map (PWLCM) used as a keystream generator, XOR'd with the
-plaintext. Pure-integer math (modulus M = 2**61 - 1, a Mersenne prime) makes the
+plaintext. Pure-integer math (modulus M = 2**127 - 1, the Mersenne prime M127) makes the
 keystream bit-for-bit identical on any CPU/OS — this solves the "finite precision
 paradox" that kills floating-point chaos ciphers.
 
@@ -24,9 +24,16 @@ not trusted. Do not protect real data with it. See REPORT.md for the empirical v
 from __future__ import annotations
 
 # Mersenne prime modulus — the size of the integer "grid" the chaotic state lives on.
-M = (1 << 61) - 1          # 2305843009213693951
+# Mersenne prime M127 — the integer "grid" the chaotic state lives on (#1, the bigger grid).
+# Moving from 2^61-1 to 2^127-1 raises the per-map orbit length: by the random-function rho law
+# the period scales as ~sqrt(M), so this lifts the honest per-map period from ~2^30 to ~2^63.
+# (Verify the rho law at small scale with attacks/period_census.py; the 2^63 figure is the law's
+# PREDICTION at the new M, not a direct measurement — 2^63 is too large to census.)
+M = (1 << 127) - 1         # 170141183460469231731687303715884105727  (Mersenne prime M127)
 HALF = M // 2
-DEAD_STATE_FIX = 0x5555555555555555 % M  # escape value if the map hits the 0 fixed point
+# Mid-space escape if the map ever hits the 0 fixed point. 128-bit alternating pattern % M lands
+# well inside (0, M) for any grid up to 2^128, so this scales with M automatically.
+DEAD_STATE_FIX = 0x55555555555555555555555555555555 % M
 
 MASK64 = (1 << 64) - 1
 
@@ -54,7 +61,10 @@ def _finalize(z: int) -> int:
     HONEST NOTE: this mixer is itself a bijection. The one-wayness an attacker faces comes from
     TRUNCATION (we emit only OUTPUT_BYTES_PER_STEP of the 8 bytes) + the 3-map XOR combiner — not
     from the mix alone. To be measured, not asserted (Phase 2)."""
-    z &= MASK64
+    # Fold the wide state into 64 bits FIRST so every state bit reaches the output. With the bigger
+    # grid (#1) the state is up to 127 bits; a bare 64-bit mask would silently drop the top 63 bits.
+    # XOR-folding the high half in keeps the whole state live. (No-op for states <= 64 bits.)
+    z = (z ^ (z >> 64)) & MASK64
     z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & MASK64
     z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & MASK64
     z ^= z >> 31
@@ -77,8 +87,9 @@ class DiscreteChaoticEngine:
 
     # Smallest break-point we allow. p in {0, 1} (and the symmetric top end) put almost
     # the entire state into one branch and collapse the orbit — the period-1 weak class
-    # found in adversarial testing. We reject that whole neighbourhood.
-    MIN_P = 1 << 40
+    # found in adversarial testing. We reject that whole neighbourhood. Defined RELATIVE to the
+    # grid (HALF / 2^20) so it scales with M: the period census mirrors exactly this band.
+    MIN_P = HALF >> 20
 
     def __init__(self, seed_key: int, control_parameter: int, nonce: int = 0):
         # --- derive the break-point p, with weak-parameter REJECTION ---
@@ -96,6 +107,17 @@ class DiscreteChaoticEngine:
         n = nonce % M
         x = (x ^ ((n * 0x9E3779B97F4A7C15) % M)) % M     # golden-ratio odd multiplier mix
         x = (x + ((n << 17) % M) + 1) % M
+        # Unconditional avalanche: diffuse ANY (key, nonce) — including all-zero / tiny inputs —
+        # across the full 127-bit grid. Without this, a degenerate key with nonce=0 collapses the
+        # two mixes above to x = key + 1: a tiny start state that RESONATES with the map into a
+        # SHORT CYCLE on the bigger grid (#1) — caught by the period-census edge probe. Two ARX
+        # rounds (multiply + xorshift over M) remove that whole failure class. Deterministic, so
+        # Alice and Bob still sync. (A good cipher must turn ANY key into a strong initial state.)
+        x = (x * 0x9E3779B97F4A7C15) % M
+        x ^= x >> 53
+        x = (x * 0x2545F4914F6CDD1D + 0x9E3779B97F4A7C15) % M
+        x ^= x >> 49
+        x %= M
         if x == 0:
             x = DEAD_STATE_FIX
         self.x = x
@@ -147,6 +169,11 @@ class DiscreteChaoticEngine:
         computed ONCE at key setup, so the per-byte step has no secret-dependent divide.
         Both divisors are always > 0 (p in [MIN_P, HALF - MIN_P]), so every candidate is
         safe to evaluate even in the regions where it is discarded.
+
+        WIDE-MULTIPLY NOTE (#1, the bigger grid): with M = 2^127-1 the products `M * x` are up
+        to ~254 bits. Python big-ints absorb this transparently; the Rust core must do a
+        128x128 -> 256-bit multiply (or fold it into the Barrett/Montgomery reduction) for each
+        of the four candidates. Still constant-time — width is fixed, not secret-dependent.
         """
         x, p = self.x, self.p
 

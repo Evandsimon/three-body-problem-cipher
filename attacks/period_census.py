@@ -376,15 +376,17 @@ def run_scaling():
         a = (sy - b * sx) / n
         _p(f"  FIT: log2(median period) ~= {a:.2f} + {b:.3f} * k")
         _p(f"       exponent b = {b:.3f}  (0.50 = pure sqrt(N) random-function law)")
-        extrap = a + b * 61
-        _p(f"  EXTRAPOLATION to the real grid k=61:  median period ~= 2^{extrap:.1f} "
+        K = REAL_M.bit_length()                 # the live grid (#1: 127), not a hardcoded 61
+        extrap = a + b * K
+        lcm3 = 3 * extrap                        # 3-map XOR keystream repeats at ~lcm of the three
+        _p(f"  EXTRAPOLATION to the real grid k={K}:  median per-map period ~= 2^{extrap:.1f} "
            f"(~{2**extrap:.2e})")
         _p("")
-        _p("  MEANING: a single sub-map's keystream period is ~2^30-ish, NOT ~2^61. That is")
-        _p("  astronomically shorter than 'the whole grid'. It is still ~1 billion bytes, but")
-        _p("  the honest number to publish is sqrt(M), not M. The 3-map XOR keystream repeats")
-        _p("  only at lcm of the three (~2^90, safe); CTR mode (ctr.py) avoids orbit length")
-        _p("  entirely (each block is a fresh short orbit). See REPORT period section.\n")
+        _p(f"  MEANING: a single sub-map's keystream period is ~2^{extrap:.0f}, NOT ~2^{K} (the whole")
+        _p(f"  grid). The honest number to publish is sqrt(M), not M. The bigger grid (#1) lifted this")
+        _p(f"  from ~2^30 (at the old 2^61 grid) to ~2^{extrap:.0f} here. The 3-map XOR keystream repeats")
+        _p(f"  only at lcm of the three (~2^{lcm3:.0f}, ample); CTR mode (ctr.py) avoids orbit length")
+        _p("  entirely (each block is a fresh short orbit); auto-rekey (A) dissolves it further.\n")
 
 
 def main():

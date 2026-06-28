@@ -148,11 +148,12 @@ def test_no_short_cycle_over_many_production_keys():
 
 
 if __name__ == "__main__":
-    print("Period / cycle detection (Brent's algorithm) on the 61-bit state:\n")
+    print("Period / cycle detection (Brent's algorithm) on the 127-bit state:\n")
     measure("default key", 987654321012345987654321, 333333333333333222111, 42)
     measure("small key/ctrl", 12345, 67891, 1)
     measure("key=1 ctrl=1", 1, 1, 0)
     measure("alt nonce", 987654321012345987654321, 333333333333333222111, 99999)
-    print("\nNote: integer maps ALWAYS cycle eventually. v9 measured the honest period at")
-    print("~sqrt(M) ~ 2^30 (random-function 'rho' law), not 2^61. Run the full census with:")
+    print("\nNote: integer maps ALWAYS cycle eventually. By the random-function 'rho' law the honest")
+    print("per-map period is ~sqrt(M); at the new grid M=2^127-1 that is ~2^63 (was ~2^30 at 2^61).")
+    print("This is a PREDICTION from the law, not a direct measure (2^63 is too large). Census with:")
     print("    python3 attacks/period_census.py all")
