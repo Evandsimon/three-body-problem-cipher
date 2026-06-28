@@ -62,8 +62,8 @@ def seal(master_key: bytes, plaintext: bytes, aad: bytes = b"",
          n_maps: int = DEFAULT_N_MAPS) -> bytes:
     """Encrypt + authenticate. Returns nonce || ciphertext || tag.
 
-    Keystream comes from `n_maps` independent chaotic maps XOR-combined (default 3 — the
-    three-body design that defeats the single-map state-recovery attack). A fresh random nonce
+    Keystream comes from `n_maps` independent chaotic maps XOR-combined (default 4 — the
+    multi-body design that defeats the single-map state-recovery attack). A fresh random nonce
     is generated every call, so encrypting the same plaintext twice gives different output and
     keystream reuse cannot happen."""
     if not isinstance(master_key, (bytes, bytearray)):

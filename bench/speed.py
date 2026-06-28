@@ -28,12 +28,12 @@ def chaos(nbytes):
 
 def chaos_multimap(nbytes):
     from multimap import MultiMapEngine
-    MultiMapEngine(b"benchmark-key", b"benchmark-nonce", n_maps=3).keystream(nbytes)
+    MultiMapEngine(b"benchmark-key", b"benchmark-nonce", n_maps=4).keystream(nbytes)
 
 
 def chaos_ctr(nbytes):
     from ctr import SeekableCTR
-    SeekableCTR(b"benchmark-key", b"benchmark-nonce", n_maps=3).keystream(nbytes)
+    SeekableCTR(b"benchmark-key", b"benchmark-nonce", n_maps=4).keystream(nbytes)
 
 
 def main():

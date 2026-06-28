@@ -62,5 +62,5 @@ def test_no_short_cycle_in_sample():
         assert ks[:period] != ks[period:2 * period], f"keystream repeats at period {period}"
 
 
-def test_default_is_three_maps():
-    assert MultiMapEngine(KEY, NONCE).n_maps == 3
+def test_default_is_four_maps():
+    assert MultiMapEngine(KEY, NONCE).n_maps == 4   # #2 decision 2026-06-28: 3 -> 4 independent maps

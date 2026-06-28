@@ -1,15 +1,23 @@
 """
-MultiMapEngine — the "three-body" keystream: 3 INDEPENDENT PWLCM maps, XOR-combined.
+MultiMapEngine — the multi-body keystream: N INDEPENDENT PWLCM maps, XOR-combined (default N=4).
 
 Why this exists: the single-map cipher (engine.py) is invertible, so a known-plaintext
 state-recovery attack works at reduced scale (see attacks/known_plaintext.py, Part B). The fix
 is to run several independent chaotic maps and XOR their outputs:
 
-    keystream_byte = b1 ^ b2 ^ b3        (bi = output of independent map i)
+    keystream_byte = b0 ^ b1 ^ ... ^ b(N-1)    (bi = output of independent map i)
 
 An attacker now sees only the XOR, not any single map's output, so they cannot cheaply separate
-and roll back the three states. XOR-combining independent keystreams is a standard, sound
-"combiner" construction.
+and roll back the N states. XOR-combining independent keystreams is a standard, sound "combiner"
+construction. The independence premise is measured in attacks/map_count_attack.py (Part 1).
+
+WHY N=4 (the #2 decision, validated 2026-06-28): the count was raised 3 -> 4. Period was never the
+constraint (3 maps already give a combined ~2^189; 4 gives ~2^252). The 4th map is one more
+INDEPENDENT wall — if a structural attack ever weakens one map, the others still hide the keystream
+— plus comfortable margin over a 256-bit target. Cost is ~linear in N (4 = ~1.3x the 3-map time),
+a Rust-phase concern. We stopped at 4, not 5+: all maps share the master key, so key/KDF recovery
+(not the map count) is the true security ceiling — extra maps add period + redundancy, not
+unbounded bit-security. See attacks/map_count_attack.py for the independence/cost/work-factor data.
 
 DESIGN DECISION — the maps are INDEPENDENT, not coupled. They do not pull on each other; they are
 mixed only at the final XOR. This is deliberate:
@@ -29,7 +37,7 @@ import hashlib
 
 from engine import DiscreteChaoticEngine
 
-DEFAULT_N_MAPS = 3
+DEFAULT_N_MAPS = 4   # #2 decision (2026-06-28): 4 independent maps. See module docstring + map_count_attack.py.
 
 
 class MultiMapEngine:
@@ -42,7 +50,7 @@ class MultiMapEngine:
     nonce : bytes
         Public, unique per message. Mixed into every sub-map's derivation.
     n_maps : int
-        How many independent maps to combine (default 3 = the "three-body" design).
+        How many independent maps to combine (default 4 = the multi-body design; see DEFAULT_N_MAPS).
     """
 
     def __init__(self, master_key: bytes, nonce: bytes, n_maps: int = DEFAULT_N_MAPS):
@@ -92,7 +100,7 @@ if __name__ == "__main__":
     print(f"3-map keystream (Alice): {a.keystream(8).hex()}")
     print(f"3-map keystream (Bob):   {b.keystream(8).hex()}  (matches: determinism OK)")
 
-    msg = b"three independent chaotic maps, XOR-combined."
+    msg = b"four independent chaotic maps, XOR-combined."
     ct = MultiMapEngine(key, nonce).encrypt(msg)
     pt = MultiMapEngine(key, nonce).decrypt(ct)
     print(f"\nround-trip: {pt == msg}  ->  {pt!r}")

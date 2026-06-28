@@ -49,7 +49,7 @@ class SeekableCTR:
     nonce : bytes
         Public, unique per message. Folded into every block+map derivation.
     n_maps : int
-        Independent maps XOR-combined per block (default 3 = the three-body design).
+        Independent maps XOR-combined per block (default 4 = the multi-body design).
 
     The keystream is identical no matter how you slice it: ``keystream(n, offset=k)`` always
     returns the same global bytes ``k .. k+n-1``. That is the whole point — random access.

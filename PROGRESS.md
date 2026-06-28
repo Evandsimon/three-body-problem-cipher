@@ -1,6 +1,6 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-28 | Branch: branchless-core | Status: 🛠️ **MAX-SECURITY REBUILD IN PROGRESS** — no-compromise path. **Phase 0 done** (branchless constant-time map). **Phase 1 #3/#4 done** (frosted-glass nonlinear output + multi-byte). **Phase 1 #1 done TODAY** (bigger grid 2^61→2^127): per-map period lifted ~2^30 → ~2^62 (√M law, measured exponent 0.489). The edge census CAUGHT a real bug #1 introduced — a degenerate all-zero key fell into a 6-step short cycle because nonce=0 collapsed the init mixing to `x=key+1` (a tiny start state that resonates with the map). FIXED by an unconditional avalanche in the init so any key→strong x0; re-verified 0/7 short cycles, 72/72 tests, all 4 filter attacks pass, bias clean. **Phase 1 remaining: #2 (map count 3→4/5), A (auto-rekey ratchet).** See "🗺️ MASTER ROADMAP".
+Last updated: 2026-06-28 | Branch: branchless-core | Status: 🛠️ **MAX-SECURITY REBUILD IN PROGRESS** — no-compromise path. **Phase 0 done** (branchless constant-time map). **Phase 1 #3/#4 done** (frosted-glass nonlinear output + multi-byte). **Phase 1 #1 done TODAY** (bigger grid 2^61→2^127): per-map period lifted ~2^30 → ~2^62 (√M law, measured exponent 0.489). The edge census CAUGHT a real bug #1 introduced — a degenerate all-zero key fell into a 6-step short cycle because nonce=0 collapsed the init mixing to `x=key+1` (a tiny start state that resonates with the map). FIXED by an unconditional avalanche in the init so any key→strong x0; re-verified 0/7 short cycles, 72/72 tests, all 4 filter attacks pass, bias clean. **Phase 1 #2 done TODAY** (map count 3→**4**): chose 4 after measuring — sub-maps proven independent (worst pairwise corr 0.008), combined output clean at N=3/4/5, cost ~linear (4 = 1.3× the 3-map time), work-factor at N=4 ~2^252 period / ~2^508 joint state. Stopped at 4 not 5+ because all maps share the master key, so key/KDF — not map count — is the real ceiling. New validation: `attacks/map_count_attack.py`. **Phase 1 remaining: A (auto-rekey ratchet) — last item before Phase 2.** See "🗺️ MASTER ROADMAP".
 
 ---
 Prior status: 🔬 **v9 PERIOD CENSUS DONE** — answered the veteran's make-or-break question (§2). Honest finding: the map is a **random function**, so period ≈ **√M ≈ 2³⁰, NOT 2⁶¹** (rho/birthday law, measured exponent 0.489). **No traps:** 1,000/1,000 production keys + 7 adversarial edges show no short cycle; fixed-point capture ~1e-9 and even then mutes only 1 of the 3 XOR'd maps. Mitigated by the 3-map combiner (lcm ~2⁹⁰) + CTR mode + a per-key data limit. REPORT **v9**; `test_period.py` upgraded to a **1,000-marble guard**. **72/72 tests pass.** (Prior: all 3 hardening suggestions done & merged to main `cdc598c`.) Resume point: 🔖 **SPEED / Rust rewrite** — architecture DECIDED (chaos outer wall + AES inner vault; make the chaos engine itself fast, don't blend AES in); user leaning **Rust** for a fast constant-time core; mid-discussion on the "expert questions" checklist (§2 period = DONE; §4 constant-time + §3 KAT set = pre-port must-dos). See "🔖 RESUME HERE" in NEXT. End-goal unchanged: deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data — never the only lock.
@@ -33,9 +33,11 @@ let strangers attack it.** Never speed up or ship a design that isn't finalized 
   - [x] **#1 Bigger grid (2^127−1)** — per-map period ~2^30 → ~2^62 (erases the headline weakness).
         DONE 2026-06-28. Also fixed an init-mixing bug it exposed (degenerate-key short cycle). Note:
         `_finalize` now XOR-folds the 127-bit state into 64 bits so all bits reach the output.
-  - [ ] **#2 Final map count** (3 → 4/5) — pick and lock. ◀ NEXT
+  - [x] **#2 Final map count** (3 → **4**) — picked and locked DONE 2026-06-28. Measured: maps
+        independent (corr 0.008), no new bias, ~linear cost; 4 = one redundant wall + margin over
+        256-bit; 5+ rejected (shared-key ceiling). Validation: `attacks/map_count_attack.py`.
   - [ ] **A. Auto-rekey ratchet** — self-changing lock, burns old keys (forward secrecy + dissolves
-        the period limit).
+        the period limit). ◀ NEXT (last Phase-1 item)
 - [ ] **Phase 2 — Attack our own design HARD** (nothing proceeds unless it survives):
   - [ ] **D. New attack tooling** — correlation/differential hunt on the new output↔state (mandatory
         because #3 adds new math).
@@ -139,6 +141,20 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 - ⚠️ ~700–800× slower than AES/ChaCha. **Still UNVETTED** — not for real data.
 
 ## Recent Work
+
+### ✅ DONE 2026-06-28: Phase 1 (#2) — map count locked at 4 (was 3), chosen by measurement
+> Branch `branchless-core`. Raised `DEFAULT_N_MAPS` 3 → **4** (the keystream is the XOR of N independent
+> PWLCM maps). **Why 4, decided on evidence not vibes** (`attacks/map_count_attack.py`): (1) INDEPENDENCE
+> — the premise behind XOR-combining — holds across all maps incl. the 4th/5th: worst pairwise byte
+> correlation 0.008, bit-agreement deviation 0.001. (2) NO NEW BIAS at N=3/4/5 (chi²/serial/per-bit all
+> clean). (3) COST is ~linear: N=4 = 1.31× the N=3 time, N=5 = 1.63× (a Rust-phase concern; we pick on
+> security margin, not Python speed). (4) WORK-FACTOR: N=4 → combined period ~2^252, joint hidden state
+> ~2^508 — vast margin over a 256-bit target. **Why not 5+:** all maps derive from the SAME master key
+> (domain-separated), so key/KDF recovery — not the map count — is the true ceiling; beyond a redundant
+> wall + margin, extra maps add period & redundancy, not unbounded bit-security. Change propagates via
+> `DEFAULT_N_MAPS` (aead/siv/ctr all default to it); updated the two `n_maps==3` tests → 4 and the bench.
+> **72/72 tests pass.** Honest scope unchanged: still UNVETTED; this validates the independence premise +
+> the cost of the choice, not security. **Next: A — auto-rekey ratchet (last Phase-1 item).**
 
 ### ✅ DONE 2026-06-28: Phase 1 (#1) — bigger grid 2^61→2^127, period lifted, init bug found & fixed
 > Branch `branchless-core`. Moved the grid from `M = 2^61-1` to **`M = 2^127-1` (Mersenne prime M127)**.
