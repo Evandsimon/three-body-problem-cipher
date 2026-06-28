@@ -97,8 +97,8 @@ if __name__ == "__main__":
 
     a = MultiMapEngine(key, nonce)
     b = MultiMapEngine(key, nonce)
-    print(f"3-map keystream (Alice): {a.keystream(8).hex()}")
-    print(f"3-map keystream (Bob):   {b.keystream(8).hex()}  (matches: determinism OK)")
+    print(f"{DEFAULT_N_MAPS}-map keystream (Alice): {a.keystream(8).hex()}")
+    print(f"{DEFAULT_N_MAPS}-map keystream (Bob):   {b.keystream(8).hex()}  (matches: determinism OK)")
 
     msg = b"four independent chaotic maps, XOR-combined."
     ct = MultiMapEngine(key, nonce).encrypt(msg)

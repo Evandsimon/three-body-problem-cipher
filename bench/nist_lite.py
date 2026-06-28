@@ -14,7 +14,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from engine import DiscreteChaoticEngine  # noqa: E402
+from ratchet import RatchetEngine  # noqa: E402  -- the SHIPPED keystream (4-map under auto-rekey)
 
 
 def _bits(data: bytes):
@@ -97,7 +97,9 @@ def _igamc(a, x):
 
 
 def run(nbytes=200_000):
-    ks = DiscreteChaoticEngine(0xCAFEBABEDEADBEEF1234, 0x9999999999999, nonce=7).keystream(nbytes)
+    # the SHIPPED keystream: the 4-map combiner under the auto-rekey ratchet. With nbytes large
+    # enough to cross 64 KiB this also screens the re-key seams, not just one epoch.
+    ks = RatchetEngine(b"nist-lite-key", b"nist-lite-nonce").keystream(nbytes)
     results = {
         "monobit": monobit(ks),
         "runs": runs(ks),
@@ -117,4 +119,5 @@ def run(nbytes=200_000):
 
 
 if __name__ == "__main__":
-    run()
+    nbytes = int(sys.argv[1]) if len(sys.argv) > 1 else 200_000
+    run(nbytes)
