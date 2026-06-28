@@ -30,6 +30,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engine import M, DiscreteChaoticEngine  # noqa: E402
+from multimap import DEFAULT_N_MAPS  # noqa: E402
 
 
 # ---------- PART A: show the real map is invertible (structure exists) ----------
@@ -151,18 +152,19 @@ def demo_state_recovery():
 
 
 def demo_multimap_resists():
-    """PART C — run the EXACT Part-B attack against 3 independent XOR-combined maps.
+    """PART C — run the EXACT Part-B attack against the N independent XOR-combined maps (N=4 shipped).
 
-    The attacker now sees out = b1 ^ b2 ^ b3 (top bytes of three independent states). The
+    The attacker now sees out = b1 ^ ... ^ bN (XOR of the top bytes of N independent states). The
     single-map recovery can no longer find a state matching the observed bytes, because no single
-    map produced them. To break it the attacker must brute-force all 3 initial states jointly,
-    which explodes the work factor. We show the single-map attack FAILS, then state the cost."""
-    print("PART C — same attack vs 3 INDEPENDENT maps XOR-combined (the fix):")
+    map produced them. To break it the attacker must recover all N initial states jointly, which
+    explodes the work factor. We show the single-map attack FAILS, then state the honest cost."""
+    n_maps = DEFAULT_N_MAPS
+    print(f"PART C — same attack vs {n_maps} INDEPENDENT maps XOR-combined (the fix):")
     for m_bits in (20, 24):
         p = (1 << (m_bits - 2)) - 17
         big = (1 << m_bits) - 1
-        # three independent small maps, different seeds, same (attacker-known) p
-        seeds = [(123456789 ^ (p * (k + 3))) % big or 0x55 for k in range(3)]
+        # N independent small maps, different seeds, same (attacker-known) p
+        seeds = [(123456789 ^ (p * (k + 3))) % big or 0x55 for k in range(n_maps)]
         maps = []
         for s in seeds:
             mp = SmallPWLCM(m_bits, s, p)
@@ -183,13 +185,17 @@ def demo_multimap_resists():
         # that fails to predict is a false positive, not a break).
         x0, tested, predicted = recover_state(m_bits, p, observed)
         breaks_cipher = (x0 is not None) and (predicted == future_truth)
-        print(f"  M=2^{m_bits}, 3 maps: attack-predicts-future-keystream={breaks_cipher}  "
+        print(f"  M=2^{m_bits}, {n_maps} maps: attack-predicts-future-keystream={breaks_cipher}  "
               f"(candidates_tried={tested:,})")
-    # honest cost of the PROPER joint attack
+    # honest cost of the PROPER joint attack. The single-map "first byte fixes top 8 bits" anchor is
+    # GONE — the combined byte reveals no individual map's bits — so naive joint recovery is the full
+    # 2^(N*state), and even the smart balanced meet-in-the-middle (attacks/core_cryptanalysis.py Part
+    # C) is ~2^(ceil(N/2)*state) in time AND memory.
     sb = M.bit_length()
-    print(f"  => Single-map attack FAILS to break the 3-map cipher (cannot predict future).")
-    print(f"     Proper joint brute-force is now ~2^{3*(sb-8)} (3x the hidden state) — same")
-    print(f"     idea, no longer cheap. The invertibility footprint is hidden behind 2 other maps.\n")
+    half = (n_maps + 1) // 2
+    print(f"  => Single-map attack FAILS to break the {n_maps}-map cipher (cannot predict future).")
+    print(f"     No per-map anchor survives the XOR, so naive joint recovery is ~2^{n_maps*sb}; even the")
+    print(f"     smart meet-in-the-middle is ~2^{half*sb} (time AND memory). See core_cryptanalysis.py.\n")
 
 
 def extrapolate():

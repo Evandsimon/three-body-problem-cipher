@@ -1,11 +1,12 @@
 """
-ATTACK 4 — "Clever-burglar" cryptanalysis of the 3-map combiner.
+ATTACK 4 — "Clever-burglar" cryptanalysis of the multi-map combiner (default N=4 maps).
 
 attacks/known_plaintext.py Part C only ran the LAZY attack on the combiner: it pointed the
-single-map state-recovery at the XOR of three maps and (correctly) found it fails. That proves the
+single-map state-recovery at the XOR of the maps and (correctly) found it fails. That proves the
 combiner beats the *obvious* attack — not that it is strong. This file sends three CLEVER attacks
 that are actually designed for a combiner, and MEASURES the result (the project ethos: break-and-
-measure, never assert):
+measure, never assert). Everything here reads the SHIPPED map count (DEFAULT_N_MAPS = 4) — Phase 1
+raised it 3 -> 4, so the MITM in Part C now uses a balanced split and reports the real 4-map cost:
 
   PART A — Distinguisher / bias hunt.
       Does the SHIPPED keystream leak any statistical pattern that separates it from true random?
@@ -15,31 +16,33 @@ measure, never assert):
       in standard deviations (sigma). Many sigma on one test = a real foothold; all small = clean.
 
   PART B — Independence / synchronization check.
-      The combiner is only sound if the three maps are INDEPENDENT. If they secretly drift into
+      The combiner is only sound if the maps are INDEPENDENT. If they secretly drift into
       step (chaos synchronization) or any sub-map leaks into the combined byte, a divide-and-conquer
       correlation attack becomes possible. We measure sub-map<->combined and sub-map<->sub-map
       correlation, plus a collision/sync detector. All should sit at the random noise floor.
 
   PART C — Meet-in-the-middle (MITM) joint recovery, measured at small scale.
-      The CLEVER way to attack an XOR combiner of enumerable generators: don't brute-force all three
-      states at once (~2^(3*state)). Guess two maps, and for the third the required output is FORCED
-      (b3 = keystream ^ b1 ^ b2); look that forced stream up in a precomputed table of the third
-      map's states. We run it on small-modulus clones, VERIFY it recovers the true states and
-      predicts unseen future keystream, and COUNT the real work — to see that the combiner's true
-      strength is ~2*state, not 3*state. (Still astronomically safe at 61 bits; the point is an
-      honest number, not a break.)
+      The CLEVER way to attack an XOR combiner of N enumerable generators: don't brute-force all N
+      states at once (~2^(N*state)). Split the maps into two halves, build a table of one half's
+      forced output prefixes, and match the other half against it — classic meet-in-the-middle. We
+      run it on small-modulus clones at the SHIPPED map count, VERIFY it recovers a keystream-
+      equivalent state set and predicts unseen future keystream, and COUNT the real work — to see
+      that the combiner's true strength is ~ceil(N/2)*state (TIME *and* MEMORY), not N*state. For
+      N=4 / 127-bit state that is ~2^254, still astronomically safe; the point is an honest number.
 
 Run:  python attacks/core_cryptanalysis.py
 """
 from __future__ import annotations
 
+import itertools
 import math
 import os
 import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from multimap import MultiMapEngine  # noqa: E402
+from engine import M  # noqa: E402
+from multimap import MultiMapEngine, DEFAULT_N_MAPS  # noqa: E402
 from known_plaintext import SmallPWLCM  # noqa: E402
 
 KEY = b"clever-burglar-cryptanalysis-key"
@@ -53,7 +56,7 @@ def _sigma_balanced(ones: int, n: int) -> float:
 
 
 def bias_hunt(n_bytes: int = 300_000):
-    print("PART A — distinguisher / bias hunt on the SHIPPED 3-map keystream")
+    print(f"PART A — distinguisher / bias hunt on the SHIPPED {DEFAULT_N_MAPS}-map keystream")
     t0 = time.time()
     ks = MultiMapEngine(KEY, NONCE).keystream(n_bytes)
     gen_dt = time.time() - t0
@@ -135,10 +138,10 @@ def bias_hunt(n_bytes: int = 300_000):
 
 # ===================== PART B — independence / synchronization check =====================
 def independence_check(n: int = 200_000):
-    print("PART B — are the 3 maps truly independent (no synchronization / leak)?")
     eng = MultiMapEngine(KEY, NONCE)
     subs = eng.engines
     n_maps = len(subs)
+    print(f"PART B — are the {n_maps} maps truly independent (no synchronization / leak)?")
 
     # collect aligned sub-map bytes and the combined byte
     b = [[0] * n for _ in range(n_maps)]
@@ -183,26 +186,38 @@ def independence_check(n: int = 200_000):
 
 
 # ===================== PART C — meet-in-the-middle joint recovery =====================
-def _stream_from_state(m_bits: int, p: int, state: int, t: int) -> tuple[int, ...]:
-    mp = SmallPWLCM(m_bits, state, p)
-    mp.x = state
-    return tuple(mp.out() for _ in range(t))
+def _prefix_table(m_bits: int, p: int, key_len: int, n_states: int) -> list:
+    """Precompute the first `key_len` output bytes for every state. All maps share (p, dynamics),
+    so ONE table serves every map — a state's output prefix is the same whichever slot it sits in."""
+    pref = []
+    for s in range(n_states):
+        mp = SmallPWLCM(m_bits, s, p)
+        mp.x = s
+        pref.append(tuple(mp.out() for _ in range(key_len)))
+    return pref
 
 
-def mitm_recover(m_bits: int, verify_len: int = 14, predict: int = 8):
-    """Meet-in-the-middle on a 3-map combiner at modulus 2^m_bits (p known = worst case).
-    Returns (recovered_ok, future_predicted_ok, work_pairs, naive_pairs)."""
+def _xor_t(a: tuple, b: tuple) -> tuple:
+    return tuple(x ^ y for x, y in zip(a, b))
+
+
+def mitm_recover(m_bits: int, n_maps: int = DEFAULT_N_MAPS, verify_len: int = 14, predict: int = 8):
+    """Balanced meet-in-the-middle on an N-map XOR combiner at modulus 2^m_bits (p known = worst
+    case for the attacker). Split the maps into halves A|B; table A's combined output prefixes; for
+    each B-combo the required A-prefix is FORCED (= observed ^ B_prefix) and looked up. Verifies a
+    keystream-equivalent state set and predicts UNSEEN future keystream.
+    Returns (recovered_exact, future_predicted_ok, work, mitm_exp, naive_exp)."""
     big = (1 << m_bits) - 1
+    n_states = big + 1
     p = (1 << (m_bits - 2)) - 17
-    # three independent true states (same shape as known_plaintext Part C)
-    seeds = [(123456789 ^ (p * (k + 3))) % big or 0x55 for k in range(3)]
+    seeds = [(123456789 ^ (p * (k + 3))) % big or 0x55 for k in range(n_maps)]
 
     def combined_stream(states, t):
-        maps = [SmallPWLCM(m_bits, s, p) for s in states]
-        for mp, s in zip(maps, seeds):
-            pass
-        for mp, s in zip(maps, states):
+        maps = []
+        for s in states:
+            mp = SmallPWLCM(m_bits, s, p)
             mp.x = s
+            maps.append(mp)
         out = []
         for _ in range(t):
             c = 0
@@ -216,66 +231,75 @@ def mitm_recover(m_bits: int, verify_len: int = 14, predict: int = 8):
     observed = full[:verify_len]                 # attacker's known-plaintext window
     future_truth = full[verify_len:]             # must NOT be seen — the real test
 
-    key_len = 6                                  # bytes used to index the map-3 table
-    # precompute first `key_len` output bytes for every state of each map
-    n_states = big + 1
-    out0 = [_stream_from_state(m_bits, p, s, key_len) for s in range(n_states)]
-    out1 = [_stream_from_state(m_bits, p, s, key_len) for s in range(n_states)]
-    # table for map-2: forced-output-prefix -> list of states
-    table2: dict[tuple, list[int]] = {}
-    for s in range(n_states):
-        table2.setdefault(_stream_from_state(m_bits, p, s, key_len), []).append(s)
+    key_len = min(6, verify_len)
+    pref = _prefix_table(m_bits, p, key_len, n_states)
+    obs_pre = tuple(observed[:key_len])
 
-    obs_pre = observed[:key_len]
-    work = 0
+    half = n_maps // 2
+    a_slots, b_slots = half, n_maps - half       # |A|, |B| maps per side
+
+    def combo_prefix(combo):
+        pr = pref[combo[0]]
+        for s in combo[1:]:
+            pr = _xor_t(pr, pref[s])
+        return pr
+
+    # table over side-A combos: combined-prefix -> list of A-state-tuples
+    table: dict[tuple, list] = {}
+    for acombo in itertools.product(range(n_states), repeat=a_slots):
+        table.setdefault(combo_prefix(acombo), []).append(acombo)
+
+    work = len(table)                            # building the A table is real work
     found = None
-    for s0 in range(n_states):
-        a = out0[s0]
-        for s1 in range(n_states):
-            work += 1
-            c = out1[s1]
-            needed = tuple(obs_pre[t] ^ a[t] ^ c[t] for t in range(key_len))
-            cands = table2.get(needed)
-            if not cands:
-                continue
-            for s2 in cands:
-                # verify on the full known window, then predict the unseen future
-                if combined_stream((s0, s1, s2), verify_len) == observed:
-                    pred = combined_stream((s0, s1, s2), total)[verify_len:]
-                    found = (s0, s1, s2, pred)
-                    break
-            if found:
+    for bcombo in itertools.product(range(n_states), repeat=b_slots):
+        work += 1
+        needed_a = _xor_t(obs_pre, combo_prefix(bcombo))
+        cands = table.get(needed_a)
+        if not cands:
+            continue
+        for acombo in cands:
+            states = tuple(acombo) + tuple(bcombo)
+            if combined_stream(states, verify_len) == observed:
+                pred = combined_stream(states, total)[verify_len:]
+                found = (states, pred)
                 break
         if found:
             break
 
-    recovered_ok = found is not None and (found[0], found[1], found[2]) == tuple(seeds)
-    future_ok = found is not None and found[3] == future_truth
-    naive_pairs = (n_states) ** 3
-    return recovered_ok, future_ok, work, naive_pairs
+    recovered_exact = found is not None and found[0] == tuple(seeds)
+    future_ok = found is not None and found[1] == future_truth
+    mitm_exp = max(a_slots, b_slots) * m_bits     # the worst-case half decides the cost
+    naive_exp = n_maps * m_bits
+    return recovered_exact, future_ok, work, mitm_exp, naive_exp
 
 
 def mitm_demo():
-    print("PART C — meet-in-the-middle joint recovery (measured at small scale)")
-    for m_bits in (8, 10, 12):
+    n = DEFAULT_N_MAPS
+    print(f"PART C — balanced meet-in-the-middle on the {n}-map combiner (measured at small scale)")
+    # scales kept modest: side A holds 2^(|A|*m) entries, so m must stay small for N=4 (|A|=2).
+    for m_bits in (8, 10):
         t0 = time.time()
-        _rec, fut, work, _naive = mitm_recover(m_bits)
+        _rec, fut, work, mitm_exp, naive_exp = mitm_recover(m_bits, n_maps=n)
         dt = time.time() - t0
-        print(f"  M=2^{m_bits:>2}: predicts_unseen_keystream={fut}  "
-              f"pairs_tried_until_solved={work:,}  "
-              f"MITM_search=2^{2*m_bits} vs naive=2^{3*m_bits}  ({dt:.1f}s)")
+        print(f"  M=2^{m_bits}: predicts_unseen_keystream={fut}  "
+              f"states_examined={work:,}  "
+              f"MITM_search=2^{mitm_exp} vs naive=2^{naive_exp}  ({dt:.1f}s)")
     print("  ----")
     print("  The attack SUCCEEDS at small scale: it finds a keystream-equivalent state set and")
-    print("  predicts UNSEEN future keystream (a >2^-150 fluke is impossible, so it's a real break).")
-    print("  Its search space is 2^(2*state) — guess two maps, the third is FORCED and table-looked-up")
-    print("  — not the 2^(3*state) a naive joint brute-force assumes. So 3 maps buy ~2x the state in")
-    print("  strength, not 3x. At 61 bits that is ~2^122 (MITM), still far beyond any attacker, but the")
-    print("  honest number is 2^122 — correcting the REPORT's 2^159 estimate downward.\n")
+    print("  predicts UNSEEN future keystream (a >2^-100 fluke is impossible, so it's a real break).")
+    print(f"  Balanced MITM splits the {n} maps into halves: table one half's forced output prefixes,")
+    print("  match the other half. Cost ~2^(ceil(N/2)*state) in TIME *and* MEMORY — not the")
+    print("  2^(N*state) of naive joint brute force.")
+    sb = M.bit_length()
+    half = (n + 1) // 2
+    print(f"  For the SHIPPED design (N={n} maps, {sb}-bit state): MITM ~2^{half*sb} (and 2^{half*sb}")
+    print(f"  memory, itself prohibitive), naive joint ~2^{n*sb}. Both astronomically safe; 2^{half*sb}")
+    print(f"  is the honest worst-case attacker cost, superseding the old 3-map figure of 2^122.\n")
 
 
 if __name__ == "__main__":
     print("=" * 78)
-    print("CLEVER-BURGLAR CRYPTANALYSIS OF THE 3-MAP CHAOS COMBINER")
+    print(f"CLEVER-BURGLAR CRYPTANALYSIS OF THE {DEFAULT_N_MAPS}-MAP CHAOS COMBINER")
     print("=" * 78 + "\n")
     a = bias_hunt()
     b = independence_check()
@@ -286,7 +310,8 @@ if __name__ == "__main__":
           f"({'clean' if a < 5 else 'investigate'})")
     print(f"  Part B (independence) ..... strongest deviation {b:.2f} sigma "
           f"({'independent' if b < 5 else 'investigate'})")
-    print(f"  Part C (MITM) ............. combiner strength measured at ~2*state (not 3*state)")
+    print(f"  Part C (MITM) ............. combiner strength ~ceil(N/2)*state "
+          f"(~2^{((DEFAULT_N_MAPS+1)//2)*M.bit_length()} at N={DEFAULT_N_MAPS})")
     print("  Overall: still UNVETTED. These clever attacks did not break the full cipher, but")
     print("  Part C corrects the strength estimate and the approach is a measured result.")
     print("=" * 78)

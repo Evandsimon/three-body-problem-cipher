@@ -28,7 +28,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engine import M, _finalize, OUTPUT_BYTES_PER_STEP  # noqa: E402
-from multimap import MultiMapEngine                      # noqa: E402
+from multimap import MultiMapEngine, DEFAULT_N_MAPS      # noqa: E402
 from known_plaintext import SmallPWLCM, recover_state    # noqa: E402
 
 
@@ -153,7 +153,7 @@ def part3_no_shortcut(m_bits=16):
 
 # ---------- PART 4: the filtered keystream introduces no detectable bias ----------
 def part4_no_bias(n_bytes=200_000):
-    """Per-bit bias, byte chi-square, and serial correlation on the real 3-map filtered keystream.
+    """Per-bit bias, byte chi-square, and serial correlation on the real multi-map filtered keystream.
     A good output filter should keep the stream statistically flat (avalanche is already ~0.5)."""
     ks = MultiMapEngine(b"bias-probe-key", b"bias-probe-nonce").keystream(n_bytes)
 
@@ -179,7 +179,7 @@ def part4_no_bias(n_bytes=200_000):
     den = sum((b - mean) ** 2 for b in ks)
     serial = num / den if den else 0.0
 
-    print("PART 4 — randomness of the filtered 3-map keystream (no new bias?):")
+    print(f"PART 4 — randomness of the filtered {DEFAULT_N_MAPS}-map keystream (no new bias?):")
     print(f"  worst per-bit bias : {worst_sigma:.2f} sigma   (|<3| = clean)")
     print(f"  byte chi-square    : {chi2:.1f}  on df=255  (expect ~255 +/- 22.6)")
     print(f"  serial corr (lag-1): {serial:+.5f}        (~0 = clean)")
