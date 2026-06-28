@@ -1,6 +1,9 @@
 # Chaos Cipher (Progress)
 
-Last updated: 2026-06-06 | Branch: period-census (pre-merge) | Status: 🔬 **v9 PERIOD CENSUS DONE** — answered the veteran's make-or-break question (§2). Honest finding: the map is a **random function**, so period ≈ **√M ≈ 2³⁰, NOT 2⁶¹** (rho/birthday law, measured exponent 0.489). **No traps:** 1,000/1,000 production keys + 7 adversarial edges show no short cycle; fixed-point capture ~1e-9 and even then mutes only 1 of the 3 XOR'd maps. Mitigated by the 3-map combiner (lcm ~2⁹⁰) + CTR mode + a per-key data limit. REPORT **v9**; `test_period.py` upgraded to a **1,000-marble guard**. **72/72 tests pass.** (Prior: all 3 hardening suggestions done & merged to main `cdc598c`.) Resume point: 🔖 **SPEED / Rust rewrite** — architecture DECIDED (chaos outer wall + AES inner vault; make the chaos engine itself fast, don't blend AES in); user leaning **Rust** for a fast constant-time core; mid-discussion on the "expert questions" checklist (§2 period = DONE; §4 constant-time + §3 KAT set = pre-port must-dos). See "🔖 RESUME HERE" in NEXT. End-goal unchanged: deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data — never the only lock.
+Last updated: 2026-06-28 | Branch: branchless-core | Status: 🛠️ **MAX-SECURITY REBUILD STARTED** — user chose the no-compromise path (quality over ease). Master roadmap recorded below (7 phases). Phase 0 done (branchless constant-time map, timing-leak #1 blueprint, bit-identical, 72/72). Now in **Phase 1**: building #3 frosted-glass output filter + #4 more-bytes-per-step. See "🗺️ MASTER ROADMAP" section.
+
+---
+Prior status: 🔬 **v9 PERIOD CENSUS DONE** — answered the veteran's make-or-break question (§2). Honest finding: the map is a **random function**, so period ≈ **√M ≈ 2³⁰, NOT 2⁶¹** (rho/birthday law, measured exponent 0.489). **No traps:** 1,000/1,000 production keys + 7 adversarial edges show no short cycle; fixed-point capture ~1e-9 and even then mutes only 1 of the 3 XOR'd maps. Mitigated by the 3-map combiner (lcm ~2⁹⁰) + CTR mode + a per-key data limit. REPORT **v9**; `test_period.py` upgraded to a **1,000-marble guard**. **72/72 tests pass.** (Prior: all 3 hardening suggestions done & merged to main `cdc598c`.) Resume point: 🔖 **SPEED / Rust rewrite** — architecture DECIDED (chaos outer wall + AES inner vault; make the chaos engine itself fast, don't blend AES in); user leaning **Rust** for a fast constant-time core; mid-discussion on the "expert questions" checklist (§2 period = DONE; §4 constant-time + §3 KAT set = pre-port must-dos). See "🔖 RESUME HERE" in NEXT. End-goal unchanged: deploy as **outer layer over a vetted primitive** ("Option B") for AsturAI client data — never the only lock.
 
 > 📓 Older work-log entries trimmed for brevity — full history in git.
 
@@ -10,9 +13,48 @@ as a research/learning project. "Prove it works" = try hard to break it and meas
 real standards. Engine-first; any real application is deferred until the evidence justifies it
 (and even then, only as a layer over a vetted primitive).
 
+## 🗺️ MASTER ROADMAP — the no-compromise, max-security path (set 2026-06-28)
+User's directive: ignore "what's easy for a lazy system"; top priority is the best, most secure
+version we can build. Honest ceiling (always true): the chaos layer ALONE never earns trust — real
+security = a fast, hardened, **externally-reviewed** outer wall over a **vetted vault** (two locks).
+Ordering rule: **design it right → break it → freeze it → make it fast → wrap it → two-lock it →
+let strangers attack it.** Never speed up or ship a design that isn't finalized + self-attacked.
+
+- [x] **Phase 0 — Branchless constant-time map** (DONE 2026-06-28, branch `branchless-core`). Removed
+      the secret-dependent `if/elif` (timing-leak #1) via 4-candidate mask-select. Bit-identical to old
+      (fingerprint + 200k random/edge cases + 72/72 tests). Left a code note: timing-leak #2 (divide by
+      secret `p`) is NOT fixed here — needs the precomputed-reciprocal trick in Rust (Phase 4).
+
+- [ ] **Phase 1 — Finalize the CORE design** (math changes happen here, together, before freeze/port):
+  - [ ] **#3 Frosted-glass output** — nonlinear ARX finalizer so output can't be rolled back to state
+        (kills the invertibility weakness). ◀ IN PROGRESS
+  - [ ] **#4 More bytes per step** — stop emitting 1 byte per expensive step; safe *because* of #3.
+  - [ ] **#1 Bigger grid (2^127−1)** — per-map period ~2^30 → ~2^63 (erases the headline weakness).
+  - [ ] **#2 Final map count** (3 → 4/5) — pick and lock.
+  - [ ] **A. Auto-rekey ratchet** — self-changing lock, burns old keys (forward secrecy + dissolves
+        the period limit).
+- [ ] **Phase 2 — Attack our own design HARD** (nothing proceeds unless it survives):
+  - [ ] **D. New attack tooling** — correlation/differential hunt on the new output↔state (mandatory
+        because #3 adds new math).
+  - [ ] Re-run every existing attack vs the new design (two-time-pad, state-recovery, MITM).
+  - [ ] New period census on the bigger grid; state-size/TMTO check; **#7 heavy randomness**
+        (PractRand/dieharder).
+- [ ] **Phase 3 — Freeze + write the contract:**
+  - [ ] **E. Threat-model + bit-security claim** (one page). [ ] **§3 KAT** frozen vectors.
+        [ ] Constant-time spec (map done + reciprocal-division plan).
+- [ ] **Phase 4 — Rust core (the speed blocker):** [ ] #5 Rust hot loop (~50–100×).
+      [ ] **§4 precomputed reciprocal** (kills timing-leak #2 + speed). [ ] parallel maps + CTR blocks.
+      [ ] differential fuzz Rust==KAT; benchmark vs AES/ChaCha.
+- [ ] **Phase 5 — Harden the shell:** [ ] **#6 key-commitment.** [ ] **B. streaming/chunked AEAD**
+      (big files). [ ] wire **A. auto-rekey** in. [ ] **F. post-quantum hybrid** key exchange.
+- [ ] **Phase 6 — THE SECURITY GOAL: two locks** — integrate as the OUTER layer over a vetted inner
+      vault (AES-256-GCM / XChaCha20-Poly1305); specify where chaos sits + order of ops ("Option B").
+- [ ] **Phase 7 — External validation** — peer review / audit; only outsiders failing to break it turns
+      "I think it's secure" into "it's secure." Mandatory for the stated goal.
+
 ## ⏭️ NEXT
 
-### 🔖 RESUME HERE (next session — SPEED via a Rust engine core)
+### 🔖 PRIOR RESUME POINT (superseded by the Master Roadmap above — kept for context)
 **Architecture DECIDED with user (2026-06-06):** chaos = **outer wall** (exposed, gets battle-tested by
 real attacks), AES = **inner vault** (if the chaos wall ever cracks, the client is STILL fully protected).
 Two real walls = "Option B". The blocker is **speed** — a slow cipher is unsellable ("clogs the client's
@@ -94,6 +136,29 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 - ⚠️ ~700–800× slower than AES/ChaCha. **Still UNVETTED** — not for real data.
 
 ## Recent Work
+
+### ✅ DONE 2026-06-28: Phase 0 + Phase 1 (#3, #4) — branchless map + frosted-glass output, attacked
+> Branch `branchless-core`. User chose the **no-compromise, max-security path** and the 7-phase Master
+> Roadmap was recorded (see top). Three pieces landed and were measured, not asserted:
+> **(Phase 0) Branchless constant-time map** — replaced the secret-dependent 4-way `if/elif` in
+> `_next_state` with a 4-candidate mask-select (walk all doors every step, keep the right answer), killing
+> timing-leak #1. Proven **bit-identical** to the old map: same keystream fingerprint + 200k random/edge
+> cases (0 mismatches) + 72/72 tests. Honest note left in code: timing-leak #2 (divide by secret `p`)
+> is NOT fixed here — needs the precomputed-reciprocal trick in the Rust port (Phase 4).
+> **(#3) Frosted-glass output** — `generate_byte` no longer emits a raw window of the state
+> (`(x>>24)&0xFF`); it now emits bytes from a NONLINEAR finalizer `_finalize` (SplitMix64/fmix64,
+> multiply+xorshift). Lives in `engine.py` so all 3 layers (engine/multimap/ctr) inherit it.
+> **(#4) More bytes per step** — emit `OUTPUT_BYTES_PER_STEP=4` of 8 bytes per chaotic step (buffered).
+> Honest: no Python speedup yet (branchless map = 4× arithmetic/step, Python per-byte overhead dominates)
+> — the #4 win materializes only in Rust. 4 is a conservative placeholder, to be confirmed after #1.
+> **Attacked (`attacks/output_filter_attack.py`, 4 parts, all PASS):** (1) output reveals no contiguous
+> state slice (best window match 0.004 ≈ 1/256, was 1.000); (2) the exact known-plaintext break that
+> cracks the old cipher now FAILS to predict future keystream; (3) attacker who knows the filter loses
+> the free 8 bits (2^(n-8) anchored search → full 2^n, no affine shortcut); (4) no new bias (worst bit
+> 1.91σ, χ²=278, serial 0.0007). Avalanche 0.4976. **Precise claim:** the filter HIDES the state from the
+> output — NOT "map is now non-invertible" (it still is); protection rests on truncation + 3-map XOR.
+> Still UNVETTED. 72/72 tests pass.
+
 
 ### ✅ DONE 2026-06-06: v9 — period census (answered §2, the chaos make-or-break question)
 > On branch `period-census`. Built `attacks/period_census.py` to answer the veteran's #1 question —

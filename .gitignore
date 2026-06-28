@@ -27,3 +27,6 @@ env/
 
 # Generated graphify knowledge-graph output (~10MB, regenerable via /graphify)
 graphify-out/
+
+# Legal / IP documents — contain personal data (N.I.E. etc.); keep OFF GitHub
+docs/

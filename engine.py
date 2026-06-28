@@ -28,6 +28,38 @@ M = (1 << 61) - 1          # 2305843009213693951
 HALF = M // 2
 DEAD_STATE_FIX = 0x5555555555555555 % M  # escape value if the map hits the 0 fixed point
 
+MASK64 = (1 << 64) - 1
+
+# --- Output hardening (#3 "frosted glass") + throughput (#4) -----------------------------------
+# We do NOT emit the raw state. Each chaotic step's state is run through a nonlinear finalizer
+# (_finalize) and we emit OUTPUT_BYTES_PER_STEP bytes of the result. This knob trades speed vs
+# security:
+#   * SECURITY: the finalizer (xorshift + multiply, "ARX") destroys the PWLCM's piecewise-LINEAR
+#     structure, so an attacker can't algebraically roll the output back to the state — closing the
+#     invertibility weakness the old raw "(x >> 24) & 0xFF" left open. We also emit FEWER bytes than
+#     the finalized word is wide, so part of every state stays hidden behind the glass.
+#   * SPEED: more bytes per expensive step => fewer steps per message (the #4 throughput win).
+# The exact value MUST be validated by the Phase-2 attack tooling (correlation / state-recovery),
+# never assumed. 4 of 8 bytes is the conservative starting point.
+OUTPUT_BYTES_PER_STEP = 4
+
+
+def _finalize(z: int) -> int:
+    """Nonlinear ARX 'frosted-glass' output filter (the SplitMix64 / MurmurHash3 fmix64 mixer).
+
+    Maps the 61-bit chaotic state to a well-avalanched 64-bit word with xorshift + multiply. The
+    multiplications make it NONLINEAR, so the piecewise-linear PWLCM structure an attacker would use
+    to invert the map is destroyed. No division, no tables => fast, Rust-friendly, constant-time.
+
+    HONEST NOTE: this mixer is itself a bijection. The one-wayness an attacker faces comes from
+    TRUNCATION (we emit only OUTPUT_BYTES_PER_STEP of the 8 bytes) + the 3-map XOR combiner — not
+    from the mix alone. To be measured, not asserted (Phase 2)."""
+    z &= MASK64
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & MASK64
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & MASK64
+    z ^= z >> 31
+    return z
+
 
 class DiscreteChaoticEngine:
     """Integer PWLCM keystream generator + XOR stream cipher.
@@ -73,6 +105,11 @@ class DiscreteChaoticEngine:
         for _ in range(16):
             self._next_state()
 
+        # Output buffer for the multi-byte-per-step (#4) hardened output (#3). Each refill does one
+        # chaotic step + one nonlinear finalize and yields OUTPUT_BYTES_PER_STEP bytes.
+        self._buf = b""
+        self._buf_i = 0
+
     @classmethod
     def from_master(cls, master_key: bytes, nonce: bytes) -> "DiscreteChaoticEngine":
         """Build an engine from arbitrary byte-string material via a hash-based KDF.
@@ -89,24 +126,58 @@ class DiscreteChaoticEngine:
         return cls(seed_key, control, nonce=0)         # nonce already mixed into the hash
 
     def _next_state(self) -> None:
-        """One step of the integer PWLCM. Pure integer math => identical on all CPUs."""
+        """One step of the integer PWLCM — BRANCHLESS, constant-time blueprint.
+
+        Pure integer math => bit-identical on all CPUs. This is the constant-time
+        rewrite of the original 4-way `if/elif` (kept in git history): instead of
+        choosing ONE of the four PWLCM segments based on the secret state (a timing
+        leak — different segments could take different time), we compute ALL four
+        candidate next-states every step and keep only the one whose region holds,
+        via 0/1 masks. Same work regardless of the secret => no branch-timing signal.
+
+        Output is provably identical to the original for every x in [0, M): the four
+        region predicates are mutually exclusive and exhaustive over (0, M), and x==0
+        / out-of-range falls through to the dead-state escape exactly as before.
+
+        REMAINING TIMING CAVEAT (for the Rust port, not fixable in Python): the two
+        divisions below are by the SECRET-derived divisors p and (HALF - p). Hardware
+        integer division is data-dependent on many CPUs, so this is a second timing
+        leak the branch-removal does NOT close. The Rust core must replace `// p` and
+        `// (HALF - p)` with a precomputed-reciprocal multiply-shift (Barrett/Montgomery)
+        computed ONCE at key setup, so the per-byte step has no secret-dependent divide.
+        Both divisors are always > 0 (p in [MIN_P, HALF - MIN_P]), so every candidate is
+        safe to evaluate even in the regions where it is discarded.
+        """
         x, p = self.x, self.p
-        if 0 < x < p:
-            x = (M * x) // p
-        elif p <= x < HALF:
-            x = (M * (x - p)) // (HALF - p)
-        elif HALF <= x < (M - p):
-            x = (M * (M - p - x)) // (HALF - p)
-        elif (M - p) <= x < M:
-            x = (M * (M - x)) // p
-        else:
-            x = DEAD_STATE_FIX  # x == 0 (or out of range): escape the dead fixed point
-        self.x = x
+
+        # Four PWLCM segment candidates — all evaluated every step (constant work).
+        # Discarded candidates may use "wrong-region" subtractions; harmless, masked out.
+        r1 = (M * x) // p                       # region (0, p)
+        r2 = (M * (x - p)) // (HALF - p)        # region [p, HALF)
+        r3 = (M * (M - p - x)) // (HALF - p)    # region [HALF, M - p)
+        r4 = (M * (M - x)) // p                 # region [M - p, M)
+
+        # Region masks (0 or 1). Exactly one is 1 for x in (0, M); all 0 for the dead case.
+        in1 = (0 < x) & (x < p)
+        in2 = (p <= x) & (x < HALF)
+        in3 = (HALF <= x) & (x < (M - p))
+        in4 = ((M - p) <= x) & (x < M)
+        dead = not (in1 | in2 | in3 | in4)      # x == 0 (the fixed point) or out of range
+
+        # Mask-select: sum of (candidate * its mask). Bit-identical to the if/elif chain.
+        self.x = (r1 * in1) + (r2 * in2) + (r3 * in3) + (r4 * in4) + (DEAD_STATE_FIX * dead)
 
     def generate_byte(self) -> int:
-        """Advance one step and emit 8 bits from the middle of the 61-bit state."""
-        self._next_state()
-        return (self.x >> 24) & 0xFF
+        """Emit one hardened keystream byte. Refills from one chaotic step + the nonlinear
+        finalizer (#3) when the buffer empties, taking OUTPUT_BYTES_PER_STEP bytes per step (#4).
+        Replaces the old raw "(x >> 24) & 0xFF", which exposed the linear state directly."""
+        if self._buf_i >= len(self._buf):
+            self._next_state()
+            self._buf = _finalize(self.x).to_bytes(8, "big")[:OUTPUT_BYTES_PER_STEP]
+            self._buf_i = 0
+        b = self._buf[self._buf_i]
+        self._buf_i += 1
+        return b
 
     def keystream(self, n: int) -> bytes:
         """Return the next n keystream bytes."""
