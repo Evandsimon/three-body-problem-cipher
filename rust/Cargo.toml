@@ -43,6 +43,14 @@ chacha20poly1305 = "0.10" # ChaCha20-Poly1305 inner vault (alt). Self-describing
 # the core stays fully deterministic, the caller owns all randomness (seed + encaps message), so the KAT
 # can pin it — the same discipline as twolock's explicit nonces. `zeroize` wipes the decapsulation key.
 ml-kem = { version = "0.3.2", features = ["zeroize"] }
+# --- Phase 8.6 authenticated handshake: the VETTED post-quantum SIGNATURE half. ML-DSA-65 (FIPS 204)
+# from RustCrypto — the sibling of `ml-kem` above — proven (see the parity tests) to interoperate with
+# Python's OpenSSL 3.5 ML-DSA-65 byte-for-byte: same 32-byte seed -> same 1952-byte verifying key, and
+# signatures cross-verify both directions. `default-features = false` drops getrandom: we only ever call
+# `from_seed` + the DETERMINISTIC `sign_deterministic` + `verify_with_context`, so the core stays fully
+# deterministic and the caller owns all randomness (the same no-OS-entropy discipline as ml-kem). `alloc`
+# gives the precomputed verifying key + Vec output; `zeroize` wipes the signing key on drop.
+ml-dsa = { version = "0.1.1", default-features = false, features = ["alloc", "zeroize"] }
 
 [profile.release]
 opt-level = 3

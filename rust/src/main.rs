@@ -9,10 +9,12 @@
 use std::time::Instant;
 
 use chaos_core::{
-    aead_open, aead_seal, dh_public, dh_raw_shared, dh_shared_key, hybrid_combine,
-    hybrid_initiator_key, hybrid_respond, mlkem_decapsulate, mlkem_ek_from_seed, mlkem_encapsulate,
-    stream_open, stream_seal, twolock_open, twolock_seal, ChaosEngine, MultiMapEngine,
-    RatchetAeadReceiver, RatchetAeadSender, RatchetEngine, DEFAULT_N_MAPS, TWOLOCK_AES, TWOLOCK_CHACHA,
+    aead_open, aead_seal, auth_combine, auth_fingerprint, auth_initiator_finish,
+    auth_responder_confirm, auth_responder_respond, auth_transcript, dh_public, dh_raw_shared,
+    dh_shared_key, hybrid_combine, hybrid_initiator_key, hybrid_respond, mldsa_public_from_seed,
+    mldsa_sign, mldsa_verify, mlkem_decapsulate, mlkem_ek_from_seed, mlkem_encapsulate, stream_open,
+    stream_seal, twolock_open, twolock_seal, ChaosEngine, MultiMapEngine, RatchetAeadReceiver,
+    RatchetAeadSender, RatchetEngine, DEFAULT_N_MAPS, TWOLOCK_AES, TWOLOCK_CHACHA,
 };
 
 /// Parse a hex byte string (e.g. the KAT key/nonce material) into raw bytes.
@@ -304,6 +306,120 @@ fn main() {
                 None => println!("INVALID"),
             }
         }
+        "mldsa_public" => {
+            // chaos_core mldsa_public <seed_hex>  -> 1952-byte ML-DSA-65 verifying key hex or INVALID
+            let seed = parse_hex_bytes(&args[2]);
+            match mldsa_public_from_seed(&seed) {
+                Some(pk) => println!("{}", hex_of(&pk)),
+                None => println!("INVALID"),
+            }
+        }
+        "mldsa_sign" => {
+            // chaos_core mldsa_sign <seed_hex> <msg_hex>  -> 3309-byte deterministic signature hex or INVALID
+            let seed = parse_hex_bytes(&args[2]);
+            let msg = parse_hex_bytes(&args[3]);
+            match mldsa_sign(&seed, &msg) {
+                Some(sig) => println!("{}", hex_of(&sig)),
+                None => println!("INVALID"),
+            }
+        }
+        "mldsa_verify" => {
+            // chaos_core mldsa_verify <public_hex> <msg_hex> <sig_hex>  -> OK or FAIL
+            let public = parse_hex_bytes(&args[2]);
+            let msg = parse_hex_bytes(&args[3]);
+            let sig = parse_hex_bytes(&args[4]);
+            println!("{}", if mldsa_verify(&public, &msg, &sig) { "OK" } else { "FAIL" });
+        }
+        "auth_fingerprint" => {
+            // chaos_core auth_fingerprint <sig_public_hex> <static_public_hex>  -> 8-byte fingerprint hex
+            let sig_public = parse_hex_bytes(&args[2]);
+            let static_public = parse_hex_bytes(&args[3]);
+            println!("{}", hex_of(&auth_fingerprint(&sig_public, &static_public)));
+        }
+        "auth_transcript" => {
+            // chaos_core auth_transcript <init_sig_pub> <init_static_pub> <resp_sig_pub> <resp_static_pub>
+            //     <dh_i> <kem_pk_i> <dh_r> <kem_ct>  -> 64-byte transcript digest hex
+            let init_sig_pub = parse_hex_bytes(&args[2]);
+            let init_static_pub = parse_hex_bytes(&args[3]);
+            let resp_sig_pub = parse_hex_bytes(&args[4]);
+            let resp_static_pub = parse_hex_bytes(&args[5]);
+            let dh_i = parse_hex_bytes(&args[6]);
+            let kem_pk_i = parse_hex_bytes(&args[7]);
+            let dh_r = parse_hex_bytes(&args[8]);
+            let kem_ct = parse_hex_bytes(&args[9]);
+            let tr = auth_transcript(
+                &init_sig_pub, &init_static_pub, &resp_sig_pub, &resp_static_pub, &dh_i, &kem_pk_i,
+                &dh_r, &kem_ct,
+            );
+            println!("{}", hex_of(&tr));
+        }
+        "auth_combine" => {
+            // chaos_core auth_combine <ee_hex> <pq_hex> <es_hex> <se_hex> <transcript_hex> <info_hex>
+            //     -> 32-byte authenticated session key hex
+            let ee = parse_hex_bytes(&args[2]);
+            let pq = parse_hex_bytes(&args[3]);
+            let es = parse_hex_bytes(&args[4]);
+            let se = parse_hex_bytes(&args[5]);
+            let transcript = parse_hex_bytes(&args[6]);
+            let info = parse_hex_bytes(&args[7]);
+            println!("{}", hex_of(&auth_combine(&ee, &pq, &es, &se, &transcript, &info)));
+        }
+        "auth_responder_respond" => {
+            // chaos_core auth_responder_respond <resp_sig_seed> <resp_static_priv> <resp_eph_priv>
+            //     <init_sig_pub> <init_static_pub> <dh_i> <kem_pk_i> <kem_m> <info>
+            //     -> "<dh_r> <kem_ct> <sig_r> <key> <transcript>" or INVALID
+            let resp_sig_seed = parse_hex_bytes(&args[2]);
+            let resp_static_priv = parse_hex_bytes(&args[3]);
+            let resp_eph_priv = parse_hex_bytes(&args[4]);
+            let init_sig_pub = parse_hex_bytes(&args[5]);
+            let init_static_pub = parse_hex_bytes(&args[6]);
+            let dh_i = parse_hex_bytes(&args[7]);
+            let kem_pk_i = parse_hex_bytes(&args[8]);
+            let kem_m = parse_hex_bytes(&args[9]);
+            let info = parse_hex_bytes(&args[10]);
+            match auth_responder_respond(
+                &resp_sig_seed, &resp_static_priv, &resp_eph_priv, &init_sig_pub, &init_static_pub,
+                &dh_i, &kem_pk_i, &kem_m, &info,
+            ) {
+                Some((dh_r, kem_ct, sig_r, key, transcript)) => println!(
+                    "{} {} {} {} {}",
+                    hex_of(&dh_r), hex_of(&kem_ct), hex_of(&sig_r), hex_of(&key), hex_of(&transcript)
+                ),
+                None => println!("INVALID"),
+            }
+        }
+        "auth_initiator_finish" => {
+            // chaos_core auth_initiator_finish <init_sig_seed> <init_static_priv> <init_eph_priv>
+            //     <init_kem_seed> <resp_sig_pub> <resp_static_pub> <dh_r> <kem_ct> <sig_r> <info>
+            //     -> "<key> <sig_i>" or INVALID (responder signature failed / bad input)
+            let init_sig_seed = parse_hex_bytes(&args[2]);
+            let init_static_priv = parse_hex_bytes(&args[3]);
+            let init_eph_priv = parse_hex_bytes(&args[4]);
+            let init_kem_seed = parse_hex_bytes(&args[5]);
+            let resp_sig_pub = parse_hex_bytes(&args[6]);
+            let resp_static_pub = parse_hex_bytes(&args[7]);
+            let dh_r = parse_hex_bytes(&args[8]);
+            let kem_ct = parse_hex_bytes(&args[9]);
+            let sig_r = parse_hex_bytes(&args[10]);
+            let info = parse_hex_bytes(&args[11]);
+            match auth_initiator_finish(
+                &init_sig_seed, &init_static_priv, &init_eph_priv, &init_kem_seed, &resp_sig_pub,
+                &resp_static_pub, &dh_r, &kem_ct, &sig_r, &info,
+            ) {
+                Some((key, sig_i)) => println!("{} {}", hex_of(&key), hex_of(&sig_i)),
+                None => println!("INVALID"),
+            }
+        }
+        "auth_responder_confirm" => {
+            // chaos_core auth_responder_confirm <transcript_hex> <init_sig_pub_hex> <sig_i_hex>  -> OK or FAIL
+            let transcript = parse_hex_bytes(&args[2]);
+            let init_sig_pub = parse_hex_bytes(&args[3]);
+            let sig_i = parse_hex_bytes(&args[4]);
+            println!(
+                "{}",
+                if auth_responder_confirm(&transcript, &init_sig_pub, &sig_i) { "OK" } else { "FAIL" }
+            );
+        }
         "benchmm" => {
             // chaos_core benchmm <n_maps> <mbytes>  -> throughput of the REAL shipped combiner.
             let n_maps: usize = args.get(2).map(|s| s.parse().unwrap()).unwrap_or(DEFAULT_N_MAPS);
@@ -424,6 +540,15 @@ fn main() {
             eprintln!("       chaos_core hybrid_combine <classical_hex> <pq_hex> <info_hex> <dh_a_hex> <dh_b_hex> <kem_pk_a_hex> <kem_ct_hex>");
             eprintln!("       chaos_core hybrid_respond <dh_private_b_hex> <dh_peer_a_hex> <kem_pk_a_hex> <m_hex> <info_hex>");
             eprintln!("       chaos_core hybrid_initiator_key <dh_private_a_hex> <kem_seed_hex> <dh_peer_b_hex> <kem_ct_hex> <info_hex>");
+            eprintln!("       chaos_core mldsa_public <seed_hex>");
+            eprintln!("       chaos_core mldsa_sign <seed_hex> <msg_hex>");
+            eprintln!("       chaos_core mldsa_verify <public_hex> <msg_hex> <sig_hex>");
+            eprintln!("       chaos_core auth_fingerprint <sig_public_hex> <static_public_hex>");
+            eprintln!("       chaos_core auth_transcript <init_sig_pub> <init_static_pub> <resp_sig_pub> <resp_static_pub> <dh_i> <kem_pk_i> <dh_r> <kem_ct>");
+            eprintln!("       chaos_core auth_combine <ee_hex> <pq_hex> <es_hex> <se_hex> <transcript_hex> <info_hex>");
+            eprintln!("       chaos_core auth_responder_respond <resp_sig_seed> <resp_static_priv> <resp_eph_priv> <init_sig_pub> <init_static_pub> <dh_i> <kem_pk_i> <kem_m> <info>");
+            eprintln!("       chaos_core auth_initiator_finish <init_sig_seed> <init_static_priv> <init_eph_priv> <init_kem_seed> <resp_sig_pub> <resp_static_pub> <dh_r> <kem_ct> <sig_r> <info>");
+            eprintln!("       chaos_core auth_responder_confirm <transcript_hex> <init_sig_pub_hex> <sig_i_hex>");
             eprintln!("       chaos_core bench <mbytes>");
             eprintln!("       chaos_core benchmm <n_maps> <mbytes>");
             eprintln!("       chaos_core timing <keys>");
