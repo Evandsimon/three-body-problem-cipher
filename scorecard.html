@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chaos Cipher — what I built, in plain English</title>
+<title>Three-Body Problem Cipher — what I built, in plain English</title>
 <style>
   :root{
     --bg:#0a0f1c; --card:#121b30; --card2:#16203a;
@@ -28,6 +28,7 @@
   .top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
   h1{font-size:30px;margin:0 0 8px;letter-spacing:-.4px;font-weight:700}
   h1 .accent{color:var(--gold)}
+  .tagline-hero{font-size:16px;font-style:italic;color:var(--gold);margin:0 0 12px;max-width:680px}
   .lede{color:var(--cream);font-size:16.5px;max-width:680px;margin:0}
   .lede b{color:var(--gold)}
   .badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;
@@ -129,8 +130,9 @@
 
   <div class="top">
     <div>
-      <h1><span class="accent">Chaos Cipher</span> — what I built<span class="badge">Honest demo</span></h1>
-      <p class="lede">I designed and built a complete system for <b>locking up data so only the right person can read it</b>. This page explains what's inside, shows whether it's fast enough to feel instant, and gives you an honest comparison to the lock the whole world already trusts.</p>
+      <h1><span class="accent">Three-Body Problem Cipher</span><span class="badge">Honest demo</span></h1>
+      <p class="tagline-hero">Encryption built on the problem no one can solve.</p>
+      <p class="lede">I designed and built a complete system for <b>locking up data so only the right person can read it</b> — inspired by the famous three-body problem, the chaotic puzzle from physics that has no clean solution. This page explains what's inside, shows whether it's fast enough to feel instant, and gives you an honest comparison to the lock the whole world already trusts.</p>
     </div>
     <button class="toggle" onclick="document.body.classList.toggle('show-tech')">
       <span class="off">🔧 Show the technical details</span>
@@ -287,7 +289,7 @@
       <thead>
         <tr>
           <th style="width:22%">What we're comparing</th>
-          <th class="ours" style="width:30%">My chaos system</th>
+          <th class="ours" style="width:30%">My Three-Body cipher</th>
           <th class="aes" style="width:30%">AES (the world standard)</th>
           <th style="width:18%">In plain words</th>
         </tr>
@@ -351,7 +353,7 @@
     <div class="twocol">
       <div class="panel">
         <div class="legend">
-          <span><span class="dot" style="background:var(--ours)"></span> My chaos system</span>
+          <span><span class="dot" style="background:var(--ours)"></span> My Three-Body cipher</span>
           <span><span class="dot" style="background:var(--aes)"></span> AES (bare cipher)</span>
         </div>
         <svg id="radar" viewBox="0 0 460 380" width="100%" height="auto"></svg>
@@ -382,7 +384,7 @@
     </div>
   </section>
 
-  <footer>Chaos Cipher · a research &amp; portfolio project · all numbers measured on a normal laptop · the home-made layer is honest-labelled “not yet expert-reviewed,” and never the only lock on real data.</footer>
+  <footer>Three-Body Problem Cipher · a research &amp; portfolio project · all numbers measured on a normal laptop · the home-made layer is honest-labelled “not yet expert-reviewed,” and never the only lock on real data.</footer>
 
 </div>
 
@@ -425,7 +427,7 @@
     var host = document.getElementById('speedbars');
     if(!host) return;
     var data = [
-      {n:'My chaos cipher (Rust)', v:61,   c:'#e3c168', t:'#0c1020'},
+      {n:'My Three-Body cipher (Rust)', v:61,   c:'#e3c168', t:'#0c1020'},
       {n:'My first version (Python)', v:1.7, c:'#6b5a2e', t:'#e8dcc0'},
       {n:'ChaCha20 (world standard)', v:2272, c:'#7e88f0', t:'#0c1020'},
       {n:'AES-256 (world standard)', v:9082, c:'#5bbfd6', t:'#06121a'}
