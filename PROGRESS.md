@@ -258,6 +258,17 @@ speed-benchmark baselines (AES-256-CTR, ChaCha20). Optional `ent`/`dieharder` vi
 
 ## Recent Work
 
+### ✅ DONE 2026-06-29: Reworked `scorecard.html` into a non-technical client DEMO
+> Branch `phase6-two-locks`, commit `0bbb67c`. Same page, retargeted at the people who'll hire Evan (mostly
+> non-technical — that's WHY they hire him), so plain English leads and technical detail is secondary.
+> Changes: (1) default view plain/friendly, engineer specs hidden behind a "🔧 Show technical details"
+> toggle; (2) new lead section "Is it fast enough?" — a chart of real files (contract ~0.03 s, photo
+> ~0.08 s) vs a "blink ≈ 0.1 s" line, so "~149× slower" can't be misread as "too slow"; raw speed-vs-AES
+> kept but inside the toggle; (3) each component card gets a plain "what it means for you" line + a
+> real-world analogy; (4) comparison table gains a plain-words takeaway column; (5) "UNVETTED" reworded to
+> "not yet expert-reviewed" and reframed as a credibility asset (pitch = honest, careful engineering, NOT
+> "I beat AES"). No engine/keystream touched → Rust contract intact. Still UNVETTED; only Phase 7 remains.
+
 ### ✅ DONE 2026-06-29: Visual scorecard + honest head-to-head vs AES-256-GCM (`scorecard.html`)
 > Branch `phase6-two-locks`, commit `8a29c91`. A deliverable, not a build — a self-contained HTML page
 > (no internet needed) that shows the whole project at a glance. Four parts: (1) a five-card parts list
