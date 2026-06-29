@@ -27,9 +27,10 @@ protect real data.
 
 **Explicitly OUT of scope** (handled elsewhere or not claimed): side channels other than the
 timing leak tracked in [CONSTANT_TIME.md](CONSTANT_TIME.md); fault injection; protecting the
-key while it is in use; and — most importantly — being the *only* lock. The intended deployment
+key while it is in use; and — most importantly — being the *only* lock. The deployment
 (Phase 6, "Option B") puts this cipher as the OUTER wall over a vetted inner vault (AES-256-GCM
-or XChaCha20-Poly1305), so if the chaos wall ever cracks the data is still fully protected.
+or ChaCha20-Poly1305), so if the chaos wall ever cracks the data is still fully protected. This
+is now BUILT, not just intended — see `twolock.py` and the threat row below.
 
 ---
 
@@ -49,6 +50,7 @@ or XChaCha20-Poly1305), so if the chaos wall ever cracks the data is still fully
 | **Man-in-the-middle on key agreement** | Triple-DH (static + ephemeral) authenticated exchange; a MITM lacking a party's static private key cannot derive the session key. | `auth_keyexchange.py` |
 | **Quantum / harvest-now-decrypt-later** (record DH today, break it with a future quantum computer) | Hybrid key agreement (item F): mix the classical DH secret with a vetted **ML-KEM-768** (FIPS 203) secret; the session key survives if EITHER primitive holds. Defeats passive harvest-now-decrypt-later. (Unauthenticated, like plain DH — active MITM still needs `auth_keyexchange.py` + a PQ signature.) | `pq_keyexchange.py` |
 | **Timing side channel** | Both channels closed: the secret-dependent *branch* (mask-select, 1.0% spread) and the secret-dependent *divide* (Rust precomputed-reciprocal multiply-shift — measured 0.41% spread across 128 secret keys, no hardware divide on the secret in the hot loop). | [CONSTANT_TIME.md](CONSTANT_TIME.md), `rust/src/lib.rs` |
+| **The chaos cipher being broken at all** (the unvetted keystream fails) | **Two locks ("Option B"):** the chaos AEAD is only ever the OUTER wall over a vetted inner vault (AES-256-GCM / ChaCha20-Poly1305), with independent HKDF-derived keys. Even granting the attacker a *total* chaos break (the outer key), peeling the wall leaves AES-256-GCM (~2^128) — the plaintext stays protected and the inner vault independently catches any forgery. Confidentiality + integrity rest on the vetted lock; chaos is a sacrificial extra barrier. Measured in `attacks/twolock_attack.py` (5/5). | `twolock.py` |
 
 ---
 
@@ -101,5 +103,11 @@ it. That possibility is the entire reason for the outer-wall deployment and Phas
   MAC, so we largely avoided the headline attack before this; the explicit field makes it provable and
   independent of any MAC-key-derivation subtlety. It is a SHELL property on vetted HMAC — the chaos
   keystream stays UNVETTED.
+- **An unfound structural weakness in the chaos math** — possible, since it is unvetted. This is
+  now contained by design: **two locks (`twolock.py`)** put the chaos cipher only as the OUTER wall
+  over a vetted AES-256-GCM inner vault, so even a total chaos break leaves the data protected by a
+  NIST-standard cipher. The chaos layer can fail outright and the client loses nothing. (Measured:
+  `attacks/twolock_attack.py`.)
 - **No external review yet** — the single largest risk. Self-attack found and fixed real bugs
-  (a short-cycle weak-key class), which is encouraging, but it is not independent scrutiny.
+  (a short-cycle weak-key class), which is encouraging, but it is not independent scrutiny. The
+  two-lock deployment is what makes shipping an unreviewed cipher safe in the meantime.
