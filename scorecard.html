@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chaos Cipher — Build Scorecard & Head-to-Head</title>
+<style>
+  :root{
+    --bg:#0a0f1c; --bg2:#0d1424; --card:#121b30; --card2:#16203a;
+    --line:#243150; --gold:#e3c168; --gold-soft:#caa648; --cream:#f3eedd;
+    --muted:#8c98b2; --dim:#5e6982;
+    --ours:#e3c168;        /* our chaos cipher */
+    --aes:#5bbfd6;         /* AES, the world standard */
+    --chacha:#7e88f0;      /* ChaCha20 */
+    --good:#4fbf86; --warn:#e6b24a; --bad:#e0685f;
+    --radius:16px;
+    font-synthesis:none;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:radial-gradient(1200px 700px at 80% -10%, #16213f 0%, var(--bg) 55%) no-repeat, var(--bg);
+    color:var(--cream);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    line-height:1.5; padding:38px 28px 70px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1160px;margin:0 auto}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.4px;font-weight:700}
+  h1 .accent{color:var(--gold)}
+  .sub{color:var(--muted);font-size:15px;max-width:760px;margin:0 0 4px}
+  .badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+    color:#15101c;background:var(--gold);padding:4px 10px;border-radius:999px;vertical-align:middle;margin-left:10px}
+  .unvetted{background:#e0685f;color:#1a0c0b}
+  section{margin-top:40px}
+  .eyebrow{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--gold-soft);font-weight:700;margin:0 0 14px}
+  .grid{display:grid;gap:16px}
+  .cards5{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+  .card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
+    border-radius:var(--radius);padding:18px 18px 16px;position:relative;overflow:hidden}
+  .card h3{margin:0 0 3px;font-size:15px;font-weight:700;letter-spacing:.2px}
+  .card .role{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+  .card ul{list-style:none;margin:0;padding:0}
+  .card li{font-size:13px;padding:5px 0;border-top:1px dashed #233152;display:flex;justify-content:space-between;gap:12px}
+  .card li:first-child{border-top:none}
+  .card li .k{color:var(--muted)}
+  .card li .v{color:var(--cream);font-weight:600;text-align:right}
+  .tagrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .tag{font-size:11px;color:var(--cream);background:#1c2742;border:1px solid #2b3a5e;border-radius:7px;padding:3px 8px}
+  .tag.vetted{border-color:#2f5a45;background:#13301f;color:#aee9c6}
+  .tag.hand{border-color:#5a3a2f;background:#301b13;color:#f0c4a8}
+  .topbar{position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--gold),transparent)}
+
+  /* speed bars */
+  .bars{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:24px 26px}
+  .bar{display:grid;grid-template-columns:200px 1fr;align-items:center;gap:16px;margin:14px 0}
+  .bar .lab{font-size:13.5px}
+  .bar .lab small{display:block;color:var(--dim);font-size:11.5px}
+  .track{background:#0c1426;border-radius:8px;height:30px;position:relative;overflow:hidden;border:1px solid #1c2742}
+  .fill{height:100%;border-radius:7px 0 0 7px;display:flex;align-items:center;justify-content:flex-end;
+    padding-right:10px;font-size:12.5px;font-weight:700;color:#0c1020;min-width:54px;white-space:nowrap}
+  .note-log{color:var(--dim);font-size:11.5px;margin-top:6px}
+
+  /* table */
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
+    border-radius:var(--radius);overflow:hidden;font-size:13.5px}
+  th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:#0e1830;font-size:11.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+  th.ours,td.ours{background:rgba(227,193,104,.06)}
+  thead th.ours{color:var(--gold)}
+  thead th.aes{color:var(--aes)}
+  td .dim{color:var(--dim);display:block;font-size:11.5px;margin-top:2px}
+  tr:last-child td{border-bottom:none}
+  .yes{color:var(--good);font-weight:700}
+  .no{color:var(--bad);font-weight:700}
+  .meh{color:var(--warn);font-weight:700}
+
+  /* radar + legend layout */
+  .twocol{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:22px;align-items:center}
+  .radar-card,.verdict-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+  .legend{display:flex;gap:18px;margin:4px 0 14px;flex-wrap:wrap}
+  .legend span{display:inline-flex;align-items:center;gap:7px;font-size:13px}
+  .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .axkey{margin-top:8px}
+  .axkey div{font-size:12.5px;color:var(--muted);padding:4px 0;border-top:1px dashed #233152}
+  .axkey b{color:var(--cream)}
+  .verdict-card h3{margin:0 0 10px;font-size:16px}
+  .verdict-card p{font-size:13.8px;color:#d7dcea;margin:0 0 12px}
+  .verdict-card .punch{color:var(--gold);font-weight:700}
+  .callout{border-left:3px solid var(--aes);padding:8px 0 8px 14px;margin:14px 0;color:#cdd6ea;font-size:13px;background:rgba(91,191,214,.05)}
+  footer{margin-top:40px;color:var(--dim);font-size:12px;text-align:center}
+  .stat-strip{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+  .stat{flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .stat .n{font-size:22px;font-weight:700;color:var(--gold);letter-spacing:-.3px}
+  .stat .t{font-size:12px;color:var(--muted);margin-top:2px}
+  @media(max-width:820px){.twocol{grid-template-columns:1fr}.bar{grid-template-columns:130px 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Chaos Cipher — what we built <span class="badge unvetted">Unvetted research</span></h1>
+  <p class="sub">A complete, attack-tested encryption <b>system</b> built around a home-made "chaos" keystream — with a fast Rust core, modern protocol features, and a two-lock design that keeps real data behind battle-tested AES. Below: the full parts list, then an honest head-to-head against the world standard it leans on.</p>
+
+  <div class="stat-strip">
+    <div class="stat"><div class="n">~254-bit</div><div class="t">claimed strength (smallest of the attack costs)</div></div>
+    <div class="stat"><div class="n">61 MB/s</div><div class="t">Rust core speed (~35× the old Python)</div></div>
+    <div class="stat"><div class="n">13</div><div class="t">frozen test vectors (Rust = Python, bit-for-bit)</div></div>
+    <div class="stat"><div class="n">243</div><div class="t">passing checks (183 tests + 41 parity + 19 Rust − overlap) &amp; 6 self-attacks</div></div>
+  </div>
+
+  <!-- ============ INVENTORY ============ -->
+  <section>
+    <p class="eyebrow">Part 1 · Everything we built</p>
+    <div class="grid cards5">
+
+      <div class="card"><span class="topbar"></span>
+        <h3>① The chaos engine</h3>
+        <p class="role">The home-made part — the keystream itself</p>
+        <ul>
+          <li><span class="k">Math</span><span class="v">Integer PWLCM</span></li>
+          <li><span class="k">Grid size</span><span class="v">2¹²⁷ − 1</span></li>
+          <li><span class="k">Maps mixed</span><span class="v">4 (XOR)</span></li>
+          <li><span class="k">Output mixer</span><span class="v">ARX "frosted glass"</span></li>
+          <li><span class="k">Bytes / step</span><span class="v">4</span></li>
+          <li><span class="k">Period (combined)</span><span class="v">~2²⁴⁷</span></li>
+          <li><span class="k">Constant-time</span><span class="v">yes (no secret branches/divides)</span></li>
+        </ul>
+        <div class="tagrow"><span class="tag hand">hand-rolled</span><span class="tag">branchless</span></div>
+      </div>
+
+      <div class="card"><span class="topbar"></span>
+        <h3>② The safe shell (AEAD)</h3>
+        <p class="role">Locks &amp; signs each message</p>
+        <ul>
+          <li><span class="k">Integrity</span><span class="v">HMAC-SHA256</span></li>
+          <li><span class="k">Key-commitment</span><span class="v">CMT-4</span></li>
+          <li><span class="k">Nonce-reuse safety</span><span class="v">SIV mode</span></li>
+          <li><span class="k">Big files / streams</span><span class="v">STREAM</span></li>
+          <li><span class="k">Forward secrecy</span><span class="v">ratchet sessions</span></li>
+        </ul>
+        <div class="tagrow"><span class="tag vetted">HMAC/SHA vetted</span></div>
+      </div>
+
+      <div class="card"><span class="topbar"></span>
+        <h3>③ Two locks ("Option B")</h3>
+        <p class="role">The deployment that makes it safe to use</p>
+        <ul>
+          <li><span class="k">Outer wall</span><span class="v">chaos (sacrificial)</span></li>
+          <li><span class="k">Inner vault</span><span class="v">AES-256-GCM</span></li>
+          <li><span class="k">Vault option</span><span class="v">ChaCha20-Poly1305</span></li>
+          <li><span class="k">Key split</span><span class="v">HKDF-SHA256</span></li>
+          <li><span class="k">Keys shared?</span><span class="v">never</span></li>
+        </ul>
+        <div class="tagrow"><span class="tag vetted">AES-256-GCM inside</span></div>
+      </div>
+
+      <div class="card"><span class="topbar"></span>
+        <h3>④ Key agreement</h3>
+        <p class="role">How two sides safely agree a key</p>
+        <ul>
+          <li><span class="k">Classical</span><span class="v">DH 2048-bit</span></li>
+          <li><span class="k">Quantum-safe secrecy</span><span class="v">ML-KEM-768</span></li>
+          <li><span class="k">Identity proof</span><span class="v">triple-DH</span></li>
+          <li><span class="k">Quantum-safe identity</span><span class="v">ML-DSA-65</span></li>
+          <li><span class="k">Handshake</span><span class="v">hybrid on both axes</span></li>
+        </ul>
+        <div class="tagrow"><span class="tag vetted">FIPS 203 / 204</span></div>
+      </div>
+
+      <div class="card"><span class="topbar"></span>
+        <h3>⑤ Proof &amp; tooling</h3>
+        <p class="role">How we keep ourselves honest</p>
+        <ul>
+          <li><span class="k">Languages</span><span class="v">Python + Rust</span></li>
+          <li><span class="k">Tests</span><span class="v">183 + 41 parity</span></li>
+          <li><span class="k">Self-attacks</span><span class="v">6 scripts, all pass</span></li>
+          <li><span class="k">Frozen vectors</span><span class="v">13 (bit-identical)</span></li>
+          <li><span class="k">Randomness</span><span class="v">PractRand clean ½ GB</span></li>
+        </ul>
+        <div class="tagrow"><span class="tag">built &amp; attacked</span></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ SPEED ============ -->
+  <section>
+    <p class="eyebrow">Part 2 · Raw speed — how fast it scrambles data</p>
+    <div class="bars">
+      <div class="bar">
+        <div class="lab">Our chaos cipher <small>Rust core, 4 maps</small></div>
+        <div class="track"><div class="fill" id="b-ours" style="background:var(--ours)">61 MB/s</div></div>
+      </div>
+      <div class="bar">
+        <div class="lab">Old Python version <small>where we started</small></div>
+        <div class="track"><div class="fill" id="b-py" style="background:#6b5a2e;color:#e8dcc0">1.7 MB/s</div></div>
+      </div>
+      <div class="bar">
+        <div class="lab">ChaCha20-Poly1305 <small>world standard (software)</small></div>
+        <div class="track"><div class="fill" id="b-cc" style="background:var(--chacha);color:#0c1020">2,272 MB/s</div></div>
+      </div>
+      <div class="bar">
+        <div class="lab">AES-256 <small>world standard (chip-accelerated)</small></div>
+        <div class="track"><div class="fill" id="b-aes" style="background:var(--aes);color:#06121a">9,082 MB/s</div></div>
+      </div>
+      <p class="note-log">Bars use a <b>logarithmic</b> scale (each step = 10×) — on a normal scale ours would be a sliver. Plain truth: AES is about <b>149× faster</b>, ChaCha20 about <b>37× faster</b>. That's expected and fine — chaos is only ever the outer wall; the fast vetted cipher does the real work inside.</p>
+    </div>
+  </section>
+
+  <!-- ============ TABLE ============ -->
+  <section>
+    <p class="eyebrow">Part 3 · Head-to-head vs the world standard</p>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:24%">Dimension</th>
+          <th class="ours" style="width:38%">Our chaos system</th>
+          <th class="aes" style="width:38%">AES-256-GCM (world standard)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Speed</td>
+          <td class="ours"><span class="no">~61 MB/s</span><span class="dim">~149× slower</span></td>
+          <td><span class="yes">~9,000 MB/s</span><span class="dim">chip-accelerated on every modern CPU</span></td>
+        </tr>
+        <tr>
+          <td>Trusted by experts?</td>
+          <td class="ours"><span class="no">No — unvetted</span><span class="dim">the core math is home-made; never reviewed publicly</span></td>
+          <td><span class="yes">Yes — global standard</span><span class="dim">25+ years of public attack, FIPS-approved</span></td>
+        </tr>
+        <tr>
+          <td>Adoption</td>
+          <td class="ours"><span class="no">Zero</span><span class="dim">a research artifact</span></td>
+          <td><span class="yes">Everywhere</span><span class="dim">TLS, disk encryption, messaging, banking</span></td>
+        </tr>
+        <tr>
+          <td>Wrong-key safety<br>(key-commitment)</td>
+          <td class="ours"><span class="yes">Built in (CMT-4)</span><span class="dim">refuses to "open" under the wrong key</span></td>
+          <td><span class="meh">Not by default</span><span class="dim">plain GCM has a known key-confusion gap</span></td>
+        </tr>
+        <tr>
+          <td>Forward secrecy<br>(a stolen key can't read old messages)</td>
+          <td class="ours"><span class="yes">Built in (ratchet)</span></td>
+          <td><span class="meh">Not in the cipher</span><span class="dim">needs a protocol around it (e.g. TLS 1.3)</span></td>
+        </tr>
+        <tr>
+          <td>Quantum-ready handshake</td>
+          <td class="ours"><span class="yes">Built in</span><span class="dim">ML-KEM-768 + ML-DSA-65 hybrid</span></td>
+          <td><span class="meh">Cipher only</span><span class="dim">AES-256 itself stays ~128-bit vs quantum; key-exchange is a separate layer</span></td>
+        </tr>
+        <tr>
+          <td>What ultimately guards the data</td>
+          <td class="ours"><span class="yes">AES-256-GCM</span><span class="dim">our two-lock design puts the vetted cipher inside</span></td>
+          <td><span class="yes">AES-256-GCM</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout"><b>Read this fairly:</b> the right column is AES as a bare cipher. In a real protocol like TLS 1.3, AES <i>also</i> gets forward secrecy, post-quantum key exchange, and committing variants. Our "wins" on those rows come from the <b>protocol we wrapped around the cipher</b> — not from the chaos math, and not unique to us. The one thing only <i>we</i> add is a second, experimental wall.</div>
+  </section>
+
+  <!-- ============ RADAR ============ -->
+  <section>
+    <p class="eyebrow">Part 4 · The shape of the trade-off</p>
+    <div class="twocol">
+      <div class="radar-card">
+        <div class="legend">
+          <span><span class="dot" style="background:var(--ours)"></span> Our chaos system</span>
+          <span><span class="dot" style="background:var(--aes)"></span> AES-256-GCM (bare cipher)</span>
+        </div>
+        <svg id="radar" viewBox="0 0 460 380" width="100%" height="auto" aria-label="Radar comparison"></svg>
+      </div>
+      <div class="verdict-card">
+        <h3>What the picture says</h3>
+        <p>AES owns the things that matter most for trusting your data: it's <span class="punch">faster, vetted, and used everywhere</span>. Nothing we built changes that — and we didn't try to.</p>
+        <p>Our system stretches out on the other side: <span class="punch">modern protocol features</span> baked in — wrong-key safety, forward secrecy, and a quantum-ready handshake — wrapped around a vetted core.</p>
+        <div class="axkey">
+          <div><b>Speed</b> — how fast it encrypts</div>
+          <div><b>Vetted</b> — reviewed &amp; trusted by experts</div>
+          <div><b>Adoption</b> — how widely it's actually used</div>
+          <div><b>Integrity+</b> — tamper &amp; wrong-key protection</div>
+          <div><b>Forward secrecy</b> — stolen key can't read the past</div>
+          <div><b>Quantum-ready</b> — survives a future quantum computer</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VERDICT ============ -->
+  <section>
+    <div class="verdict-card">
+      <h3>The honest bottom line</h3>
+      <p>We did <b>not</b> beat AES, and we never could — it's faster and it's trusted by the whole world. What we actually built is a <span class="punch">complete, modern encryption system</span> that <b>uses</b> AES as its safety net and adds an experimental home-made wall on the outside, plus the protocol pieces (forward secrecy, quantum-ready handshakes, wrong-key safety) that a serious system needs.</p>
+      <p>The home-made keystream survived every attack <i>we</i> could throw at it — but that only means <i>we</i> couldn't break it. Real proof is the last step left: <b>letting outside cryptographers try</b>. Until then it stays clearly labelled <span class="punch">unvetted — never the only lock on real data.</span></p>
+    </div>
+  </section>
+
+  <footer>Chaos Cipher · research &amp; learning project · numbers measured on this machine, 2026-06-29 · UNVETTED — not for protecting real data on its own.</footer>
+
+</div>
+
+<script>
+  // ---- speed bars: logarithmic widths ----
+  (function(){
+    var data = {'b-ours':61,'b-py':1.7,'b-cc':2272,'b-aes':9082};
+    var max = Math.log10(9082), min = Math.log10(1.7);
+    for(var id in data){
+      var w = (Math.log10(data[id]) - min) / (max - min); // 0..1
+      w = 0.10 + w*0.90;                                   // floor so tiny bars stay visible
+      document.getElementById(id).style.width = (w*100).toFixed(1) + '%';
+    }
+  })();
+
+  // ---- radar chart ----
+  (function(){
+    var svg = document.getElementById('radar');
+    var cx=230, cy=190, R=130;
+    var axes = ['Speed','Vetted','Adoption','Integrity+','Forward\nsecrecy','Quantum\nready'];
+    // scores 0..10 — honest
+    var ours = [1, 2, 1, 9, 9, 9];
+    var aes  = [10,10,10, 7, 2, 3];
+    var n = axes.length;
+    var NS='http://www.w3.org/2000/svg';
+    function pt(i, val){
+      var a = -Math.PI/2 + i*2*Math.PI/n;
+      var r = R*val/10;
+      return [cx + r*Math.cos(a), cy + r*Math.sin(a)];
+    }
+    function poly(vals){ return vals.map(function(v,i){return pt(i,v).join(',');}).join(' '); }
+    function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+
+    // rings
+    [2,4,6,8,10].forEach(function(g){
+      var ring = el('polygon',{points:poly([g,g,g,g,g,g]),fill:'none',stroke:'#22304e','stroke-width':1});
+      svg.appendChild(ring);
+    });
+    // spokes + labels
+    for(var i=0;i<n;i++){
+      var p = pt(i,10);
+      svg.appendChild(el('line',{x1:cx,y1:cy,x2:p[0],y2:p[1],stroke:'#22304e','stroke-width':1}));
+      var lp = pt(i,11.9);
+      var lines = axes[i].split('\n');
+      var anchor = Math.abs(lp[0]-cx)<6 ? 'middle' : (lp[0]>cx?'start':'end');
+      lines.forEach(function(txt,li){
+        var t = el('text',{x:lp[0],y:lp[1]+li*12 - (lines.length-1)*6,fill:'#9aa6bf','font-size':11,
+          'text-anchor':anchor,'font-family':'sans-serif'});
+        t.textContent = txt; svg.appendChild(t);
+      });
+    }
+    // AES polygon (under)
+    svg.appendChild(el('polygon',{points:poly(aes),fill:'rgba(91,191,214,.16)',stroke:'#5bbfd6','stroke-width':2}));
+    // Ours polygon (over)
+    svg.appendChild(el('polygon',{points:poly(ours),fill:'rgba(227,193,104,.18)',stroke:'#e3c168','stroke-width':2}));
+    // vertices
+    [['#5bbfd6',aes],['#e3c168',ours]].forEach(function(pair){
+      pair[1].forEach(function(v,i){var p=pt(i,v);svg.appendChild(el('circle',{cx:p[0],cy:p[1],r:3,fill:pair[0]}));});
+    });
+  })();
+</script>
+</body>
+</html>
