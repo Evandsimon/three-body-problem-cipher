@@ -40,11 +40,14 @@ or XChaCha20-Poly1305), so if the chaos wall ever cracks the data is still fully
 | **Keystream reuse** (two-time pad) | Fresh random nonce per message (AEAD), or a synthetic IV derived from the message itself (SIV) — two different messages can never share a keystream. | `aead.py`, `siv.py` |
 | **Tampering / forgery** | Encrypt-then-MAC (HMAC-SHA256), verified in constant time before decrypting. | `aead.py` |
 | **Wrong-key / garbage** | Same MAC check — fails closed, never returns plaintext. | `aead.py` |
+| **Key-confusion** (one blob opens under two keys) | A key-commitment (#6) binds each blob to exactly one key: `C = HMAC(HMAC(key,"commit-key"), salt‖aad)`, verified in constant time. A cross-key forgery needs an HMAC-SHA256 collision (~2^128). Closes the gap that breaks AES-GCM / ChaCha20-Poly1305. | `commit.py`, `aead.py`, `siv.py` |
+| **Stream manipulation** (reorder / drop / duplicate / truncate chunks) | Streaming AEAD binds each chunk's index and a `final` flag into its HMAC tag, so a reordered/dropped/duplicated chunk fails to verify and a truncated stream never delivers the authenticated final marker. | `streaming.py` |
 | **Weak keys** | All key material passes a SHA-512 KDF; the weak-parameter band of `p` is rejected and remapped. A caller cannot pick a bad key. | `engine.from_master`, `engine.__init__` |
 | **State roll-back / invertibility** | The raw linear state is never emitted: a nonlinear ARX finalizer + truncation (4 of 8 bytes) + the 4-map XOR hide each map's footprint. | `engine._finalize`, `multimap.py` |
-| **Past-message recovery after a key leak** | Forward secrecy: the ratchet advances a one-way HMAC chain and burns the old key, so a live capture can't decrypt earlier epochs. | `ratchet.py` |
+| **Past-message recovery after a key leak** | Forward secrecy: a one-way HMAC chain burns each key after use, so a live capture can't decrypt earlier traffic. Available as a keystream (per-epoch) and now wired into the shell as a per-message **session AEAD** (item A). | `ratchet.py`, `ratchet_aead.py` |
 | **Period repetition** | Each 64 KiB epoch is a fresh ~2^247 orbit; re-keying dissolves the period limit, so usable length is effectively unbounded. | `ratchet.py` |
 | **Man-in-the-middle on key agreement** | Triple-DH (static + ephemeral) authenticated exchange; a MITM lacking a party's static private key cannot derive the session key. | `auth_keyexchange.py` |
+| **Quantum / harvest-now-decrypt-later** (record DH today, break it with a future quantum computer) | Hybrid key agreement (item F): mix the classical DH secret with a vetted **ML-KEM-768** (FIPS 203) secret; the session key survives if EITHER primitive holds. Defeats passive harvest-now-decrypt-later. (Unauthenticated, like plain DH — active MITM still needs `auth_keyexchange.py` + a PQ signature.) | `pq_keyexchange.py` |
 | **Timing side channel** | Both channels closed: the secret-dependent *branch* (mask-select, 1.0% spread) and the secret-dependent *divide* (Rust precomputed-reciprocal multiply-shift — measured 0.41% spread across 128 secret keys, no hardware divide on the secret in the hot loop). | [CONSTANT_TIME.md](CONSTANT_TIME.md), `rust/src/lib.rs` |
 
 ---
@@ -91,5 +94,12 @@ it. That possibility is the entire reason for the outer-wall deployment and Phas
   copies of the **next** chain key (the one we keep anyway) and key-schedule buffers inside the vetted
   `hmac`/`sha2` crates are not scrubbed — eliminating those needs upstream zeroize support + stack
   hygiene, out of scope for a research core. The security-critical burn (the **retired** key) is done.
+- **Key-commitment (#6)** — **CLOSED.** Both shells carry an explicit commitment (`commit.py`) that
+  binds the blob to one key (CMT-4: key + salt + aad). Validated in `attacks/commitment_attack.py`:
+  a blob never opens under a foreign key, and a measured birthday search confirms the collision cost
+  tracks 2^(w/2) → ~2^128 at full width. *Honest note:* our HMAC-SHA256 tag was already a committing
+  MAC, so we largely avoided the headline attack before this; the explicit field makes it provable and
+  independent of any MAC-key-derivation subtlety. It is a SHELL property on vetted HMAC — the chaos
+  keystream stays UNVETTED.
 - **No external review yet** — the single largest risk. Self-attack found and fixed real bugs
   (a short-cycle weak-key class), which is encouraging, but it is not independent scrutiny.

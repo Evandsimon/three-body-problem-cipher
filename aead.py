@@ -11,13 +11,16 @@ adversarial testing exposed:
                          message encrypted twice yields different output. No two-time pad.
   3. Tampering        -> handled: encrypt-then-MAC (HMAC-SHA256). open() verifies the tag
                          in constant time BEFORE decrypting and raises if anything changed.
+  4. Key-confusion    -> handled: a key-COMMITMENT (#6) binds the blob to exactly one key, so a
+                         single ciphertext cannot be made to open under two different keys (the
+                         attack that breaks AES-GCM / ChaCha20-Poly1305). See commit.py.
 
 Interface is just two calls:
 
     blob = seal(master_key, plaintext, aad=b"")
     plaintext = open_(master_key, blob, aad=b"")     # raises InvalidTag on tamper/wrong key
 
-Wire format (bytes):  nonce(16) || ciphertext(N) || tag(32)
+Wire format (bytes):  nonce(16) || commit(32) || ciphertext(N) || tag(32)
 
 STILL UNVETTED. This makes the engine structurally CORRECT (it now looks like a real AEAD,
 same shape as ChaCha20-Poly1305). It does NOT make the underlying chaos math proven-secure.
@@ -30,6 +33,7 @@ import hashlib
 import hmac
 import os
 
+from commit import COMMIT_LEN, key_commitment, verify_commitment
 from multimap import DEFAULT_N_MAPS, MultiMapEngine
 
 NONCE_LEN = 16
@@ -47,11 +51,13 @@ def _mac_key(master_key: bytes) -> bytes:
     return hmac.new(master_key, _MAC_INFO, hashlib.sha256).digest()
 
 
-def _tag(master_key: bytes, nonce: bytes, aad: bytes, ciphertext: bytes) -> bytes:
-    """Authenticate nonce + AAD + ciphertext (encrypt-then-MAC). Length-prefix AAD so
-    (aad, ct) boundaries can't be shifted by an attacker."""
+def _tag(master_key: bytes, nonce: bytes, commit: bytes, aad: bytes, ciphertext: bytes) -> bytes:
+    """Authenticate nonce + commitment + AAD + ciphertext (encrypt-then-MAC). Length-prefix AAD so
+    (aad, ct) boundaries can't be shifted by an attacker. Covering the commitment means the whole
+    blob sits under one integrity boundary."""
     m = hmac.new(_mac_key(master_key), digestmod=hashlib.sha256)
     m.update(nonce)
+    m.update(commit)
     m.update(len(aad).to_bytes(8, "big"))
     m.update(aad)
     m.update(ciphertext)
@@ -70,8 +76,9 @@ def seal(master_key: bytes, plaintext: bytes, aad: bytes = b"",
         raise TypeError("master_key must be bytes")
     nonce = os.urandom(NONCE_LEN)
     ciphertext = MultiMapEngine(master_key, nonce, n_maps).encrypt(plaintext)
-    tag = _tag(master_key, nonce, aad, ciphertext)
-    return nonce + ciphertext + tag
+    commit = key_commitment(master_key, nonce, aad)
+    tag = _tag(master_key, nonce, commit, aad, ciphertext)
+    return nonce + commit + ciphertext + tag
 
 
 def open_(master_key: bytes, blob: bytes, aad: bytes = b"",
@@ -79,15 +86,20 @@ def open_(master_key: bytes, blob: bytes, aad: bytes = b"",
     """Verify + decrypt. Raises InvalidTag if the key is wrong or anything was tampered
     with — the plaintext is NEVER returned for a bad tag. `n_maps` must match the value used
     by seal()."""
-    if len(blob) < NONCE_LEN + TAG_LEN:
+    if len(blob) < NONCE_LEN + COMMIT_LEN + TAG_LEN:
         raise InvalidTag("ciphertext too short / malformed")
     nonce = blob[:NONCE_LEN]
+    commit = blob[NONCE_LEN:NONCE_LEN + COMMIT_LEN]
     tag = blob[-TAG_LEN:]
-    ciphertext = blob[NONCE_LEN:-TAG_LEN]
+    ciphertext = blob[NONCE_LEN + COMMIT_LEN:-TAG_LEN]
 
-    expected = _tag(master_key, nonce, aad, ciphertext)
+    expected = _tag(master_key, nonce, commit, aad, ciphertext)
     if not hmac.compare_digest(expected, tag):       # constant-time: no timing leak
         raise InvalidTag("authentication failed — wrong key or tampered ciphertext")
+    # Key-commitment (#6): this blob must commit to exactly THIS key. Independent of the tag, so the
+    # property holds even if the MAC-key derivation had a weakness. Constant-time compare inside.
+    if not verify_commitment(master_key, nonce, aad, commit):
+        raise InvalidTag("key-commitment failed — blob not committed to this key")
 
     return MultiMapEngine(master_key, nonce, n_maps).decrypt(ciphertext)
 
@@ -105,7 +117,7 @@ if __name__ == "__main__":
 
     # tamper one byte in the ciphertext -> rejected
     bad = bytearray(blob)
-    bad[NONCE_LEN] ^= 0x01
+    bad[NONCE_LEN + COMMIT_LEN] ^= 0x01
     try:
         open_(key, bytes(bad))
         print("TAMPER NOT DETECTED  <-- BUG")

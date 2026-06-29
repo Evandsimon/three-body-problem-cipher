@@ -11,7 +11,10 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from commit import COMMIT_LEN  # noqa: E402
 from siv import SIV_LEN, InvalidTag, open_siv, seal_siv  # noqa: E402
+
+CT_START = COMMIT_LEN + SIV_LEN          # ciphertext begins after commit + siv in the wire format
 
 KEY = b"a shared secret of arbitrary length!!"
 MSG = b"the quick brown fox jumps over the lazy dog" * 5
@@ -29,14 +32,21 @@ def test_empty_message():
 
 def test_tamper_ciphertext_rejected():
     blob = bytearray(seal_siv(KEY, MSG))
-    blob[SIV_LEN + 3] ^= 0x01              # flip a ciphertext bit
+    blob[CT_START + 3] ^= 0x01             # flip a ciphertext bit (past commit + siv)
     with pytest.raises(InvalidTag):
         open_siv(KEY, bytes(blob))
 
 
 def test_tamper_siv_rejected():
     blob = bytearray(seal_siv(KEY, MSG))
-    blob[0] ^= 0x80                        # flip a bit in the SIV / tag
+    blob[COMMIT_LEN] ^= 0x80               # flip a bit in the SIV / tag (first byte after commit)
+    with pytest.raises(InvalidTag):
+        open_siv(KEY, bytes(blob))
+
+
+def test_tamper_commitment_rejected():
+    blob = bytearray(seal_siv(KEY, MSG))
+    blob[1] ^= 0x01                        # flip a bit inside the key-commitment field
     with pytest.raises(InvalidTag):
         open_siv(KEY, bytes(blob))
 
@@ -62,7 +72,7 @@ def test_aad_binding():
 
 def test_malformed_short_blob():
     with pytest.raises(InvalidTag):
-        open_siv(KEY, b"\x00" * (SIV_LEN - 1))
+        open_siv(KEY, b"\x00" * (COMMIT_LEN + SIV_LEN - 1))
 
 
 # --- the misuse-resistance properties ----------------------------------------
@@ -77,8 +87,8 @@ def test_different_messages_never_share_keystream():
     # ciphertexts can NEVER cancel the keystream the way a two-time pad does.
     m0 = b"X" * 64
     m1 = b"X" * 63 + b"Y"                  # differs by one byte
-    c0 = seal_siv(KEY, m0)[SIV_LEN:]
-    c1 = seal_siv(KEY, m1)[SIV_LEN:]
+    c0 = seal_siv(KEY, m0)[CT_START:]
+    c1 = seal_siv(KEY, m1)[CT_START:]
     ks0 = bytes(a ^ b for a, b in zip(c0, m0))   # recover each keystream
     ks1 = bytes(a ^ b for a, b in zip(c1, m1))
     assert ks0 != ks1, "different messages reused the same keystream — misuse resistance broken"
@@ -89,8 +99,8 @@ def test_two_time_pad_cancellation_does_not_leak():
     # keystreams differ, so this equality must NOT hold -> the attack yields nothing.
     m0 = b"Attack at dawn!!"
     m1 = b"Retreat at dusk!"
-    c0 = seal_siv(KEY, m0)[SIV_LEN:]
-    c1 = seal_siv(KEY, m1)[SIV_LEN:]
+    c0 = seal_siv(KEY, m0)[CT_START:]
+    c1 = seal_siv(KEY, m1)[CT_START:]
     xor_ct = bytes(a ^ b for a, b in zip(c0, c1))
     xor_pt = bytes(a ^ b for a, b in zip(m0, m1))
     assert xor_ct != xor_pt, "C0^C1 leaked M0^M1 — keystream was reused (two-time pad)"

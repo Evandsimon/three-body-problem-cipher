@@ -6,6 +6,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from aead import NONCE_LEN, TAG_LEN, InvalidTag, open_, seal  # noqa: E402
+from commit import COMMIT_LEN  # noqa: E402
 
 KEY = b"a shared secret of arbitrary length!!"
 MSG = b"the quick brown fox jumps over the lazy dog" * 5
@@ -28,7 +29,14 @@ def test_fresh_nonce_no_two_time_pad():
 
 def test_tamper_ciphertext_rejected():
     blob = bytearray(seal(KEY, MSG))
-    blob[NONCE_LEN + 3] ^= 0x01            # flip a ciphertext bit
+    blob[NONCE_LEN + COMMIT_LEN + 3] ^= 0x01   # flip a ciphertext bit (past nonce + commitment)
+    with pytest.raises(InvalidTag):
+        open_(KEY, bytes(blob))
+
+
+def test_tamper_commitment_rejected():
+    blob = bytearray(seal(KEY, MSG))
+    blob[NONCE_LEN + 1] ^= 0x01            # flip a bit inside the key-commitment field
     with pytest.raises(InvalidTag):
         open_(KEY, bytes(blob))
 
@@ -61,12 +69,21 @@ def test_aad_binding():
 
 def test_malformed_short_blob():
     with pytest.raises(InvalidTag):
-        open_(KEY, b"\x00" * (NONCE_LEN + TAG_LEN - 1))
+        open_(KEY, b"\x00" * (NONCE_LEN + COMMIT_LEN + TAG_LEN - 1))
 
 
 def test_weak_key_class_no_longer_collapses():
     # The old period-1 weak class (key=1, ctrl=1) is unreachable through the KDF; verify a
     # tiny/degenerate-looking master key still yields healthy, non-constant ciphertext.
     blob = seal(b"\x01", b"\x00" * 64)
-    ct = blob[NONCE_LEN:-TAG_LEN]
+    ct = blob[NONCE_LEN + COMMIT_LEN:-TAG_LEN]
     assert len(set(ct)) > 16, "keystream looks constant — weak-key collapse not fixed"
+
+
+def test_key_commitment_blob_not_openable_under_second_key():
+    # The #6 property: a blob sealed under KEY must not open under any other key — not even one a
+    # cross-key forgery would target. (Wrong-key is already rejected; this names the guarantee.)
+    blob = seal(KEY, MSG)
+    for other in (KEY[:-1] + b"X", b"\x00" * len(KEY), KEY + b"!"):
+        with pytest.raises(InvalidTag):
+            open_(other, blob)

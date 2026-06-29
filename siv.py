@@ -24,12 +24,15 @@ WHAT YOU GET
     recovered plaintext, constant-time compare. Any tampering changes the plaintext and the IV
     won't match -> rejected, plaintext never returned.
 
+  * Key-commitment (#6) for free too: a commitment binds the blob to exactly one key, so — like
+    aead.py — a single ciphertext can never be made to open under two different keys. See commit.py.
+
 Interface mirrors aead.py, minus the nonce:
 
     blob = seal_siv(master_key, plaintext, aad=b"")
     plaintext = open_siv(master_key, blob, aad=b"")   # raises InvalidTag on tamper/wrong key
 
-Wire format (bytes):  siv(32) || ciphertext(N)        # the 32-byte SIV is both IV and tag
+Wire format (bytes):  commit(32) || siv(32) || ciphertext(N)   # SIV is both IV and tag; commit binds the key
 
 TRADE-OFF (honest): deterministic encryption means identical plaintexts are detectable as equal.
 If you must hide even that, add a real random nonce into the `aad` before sealing — then the SIV
@@ -44,6 +47,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 
+from commit import COMMIT_LEN, key_commitment, verify_commitment
 from multimap import DEFAULT_N_MAPS, MultiMapEngine
 
 SIV_LEN = 32              # HMAC-SHA256 output: serves as BOTH the IV and the auth tag
@@ -81,7 +85,8 @@ def seal_siv(master_key: bytes, plaintext: bytes, aad: bytes = b"",
         raise TypeError("master_key must be bytes")
     siv = _synthesise_iv(master_key, aad, plaintext)
     ciphertext = MultiMapEngine(master_key, siv, n_maps).encrypt(plaintext)
-    return siv + ciphertext
+    commit = key_commitment(master_key, siv, aad)
+    return commit + siv + ciphertext
 
 
 def open_siv(master_key: bytes, blob: bytes, aad: bytes = b"",
@@ -89,10 +94,16 @@ def open_siv(master_key: bytes, blob: bytes, aad: bytes = b"",
     """Verify + decrypt. Decrypts with the received SIV, then re-derives the SIV from the
     recovered plaintext and compares in constant time. Raises InvalidTag on any mismatch —
     wrong key or tampering — and NEVER returns the plaintext in that case."""
-    if len(blob) < SIV_LEN:
+    if len(blob) < COMMIT_LEN + SIV_LEN:
         raise InvalidTag("ciphertext too short / malformed")
-    siv = blob[:SIV_LEN]
-    ciphertext = blob[SIV_LEN:]
+    commit = blob[:COMMIT_LEN]
+    siv = blob[COMMIT_LEN:COMMIT_LEN + SIV_LEN]
+    ciphertext = blob[COMMIT_LEN + SIV_LEN:]
+
+    # Key-commitment (#6): check the blob commits to THIS key BEFORE spending work on decryption.
+    # Needs only (key, siv, aad), all in hand — a fast, constant-time wrong-key reject.
+    if not verify_commitment(master_key, siv, aad, commit):
+        raise InvalidTag("key-commitment failed — blob not committed to this key")
 
     plaintext = MultiMapEngine(master_key, siv, n_maps).decrypt(ciphertext)
     expected = _synthesise_iv(master_key, aad, plaintext)
@@ -116,13 +127,14 @@ if __name__ == "__main__":
     # ...yet two DIFFERENT messages never share a keystream (no two-time pad, ever).
     a = seal_siv(key, b"AAAAAAAAAAAAAAAA")
     b = seal_siv(key, b"AAAAAAAAAAAAAAAB")            # differs by one bit
-    ks_a = bytes(x ^ y for x, y in zip(a[SIV_LEN:], b"AAAAAAAAAAAAAAAA"))
-    ks_b = bytes(x ^ y for x, y in zip(b[SIV_LEN:], b"AAAAAAAAAAAAAAAB"))
+    _ct = COMMIT_LEN + SIV_LEN                        # ciphertext starts after commit + siv
+    ks_a = bytes(x ^ y for x, y in zip(a[_ct:], b"AAAAAAAAAAAAAAAA"))
+    ks_b = bytes(x ^ y for x, y in zip(b[_ct:], b"AAAAAAAAAAAAAAAB"))
     print(f"different msgs -> different keystream: {ks_a != ks_b}")
 
     # tamper one byte in the ciphertext -> rejected
     bad = bytearray(blob)
-    bad[SIV_LEN] ^= 0x01
+    bad[COMMIT_LEN + SIV_LEN] ^= 0x01
     try:
         open_siv(key, bytes(bad))
         print("TAMPER NOT DETECTED  <-- BUG")
