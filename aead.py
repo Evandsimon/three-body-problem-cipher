@@ -65,16 +65,24 @@ def _tag(master_key: bytes, nonce: bytes, commit: bytes, aad: bytes, ciphertext:
 
 
 def seal(master_key: bytes, plaintext: bytes, aad: bytes = b"",
-         n_maps: int = DEFAULT_N_MAPS) -> bytes:
+         n_maps: int = DEFAULT_N_MAPS, nonce: bytes | None = None) -> bytes:
     """Encrypt + authenticate. Returns nonce || ciphertext || tag.
 
     Keystream comes from `n_maps` independent chaotic maps XOR-combined (default 4 — the
     multi-body design that defeats the single-map state-recovery attack). A fresh random nonce
     is generated every call, so encrypting the same plaintext twice gives different output and
-    keystream reuse cannot happen."""
+    keystream reuse cannot happen.
+
+    `nonce` is optional and exists ONLY to pin the one source of nondeterminism for a known-answer
+    test / Rust-parity vector (mirrors streaming.seal_stream's `salt=`). Leave it None in production
+    — a fresh random nonce is the safe default. Callers that pass it (e.g. ratchet_aead's session
+    KAT path) are responsible for never reusing one under the same key."""
     if not isinstance(master_key, (bytes, bytearray)):
         raise TypeError("master_key must be bytes")
-    nonce = os.urandom(NONCE_LEN)
+    if nonce is None:
+        nonce = os.urandom(NONCE_LEN)
+    elif len(nonce) != NONCE_LEN:
+        raise ValueError(f"nonce must be exactly {NONCE_LEN} bytes")
     ciphertext = MultiMapEngine(master_key, nonce, n_maps).encrypt(plaintext)
     commit = key_commitment(master_key, nonce, aad)
     tag = _tag(master_key, nonce, commit, aad, ciphertext)

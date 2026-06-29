@@ -9,8 +9,8 @@
 use std::time::Instant;
 
 use chaos_core::{
-    aead_open, aead_seal, stream_open, stream_seal, ChaosEngine, MultiMapEngine, RatchetEngine,
-    DEFAULT_N_MAPS,
+    aead_open, aead_seal, stream_open, stream_seal, ChaosEngine, MultiMapEngine, RatchetAeadReceiver,
+    RatchetAeadSender, RatchetEngine, DEFAULT_N_MAPS,
 };
 
 /// Parse a hex byte string (e.g. the KAT key/nonce material) into raw bytes.
@@ -121,6 +121,55 @@ fn main() {
                 None => println!("INVALID"),
             }
         }
+        "ratchet_aead_seal" => {
+            // chaos_core ratchet_aead_seal <master_hex> <nonce_hex> <aad_hex> <n_maps>
+            //     <inner_nonce_hex> <pt_hex> [<inner_nonce_hex> <pt_hex> ...]
+            // Drives a sender session through the messages (index 0,1,2,...); prints each wire blob
+            // hex, space-separated. Each message takes its own explicit inner nonce.
+            let master = parse_hex_bytes(&args[2]);
+            let nonce = parse_hex_bytes(&args[3]);
+            let aad = parse_hex_bytes(&args[4]);
+            let n_maps: usize = args[5].parse().expect("bad n_maps");
+            let rest = &args[6..];
+            assert!(rest.len().is_multiple_of(2), "need <inner_nonce> <pt> pairs");
+            let mut sender = RatchetAeadSender::new(&master, &nonce, &aad, n_maps);
+            let wires: Vec<String> = rest
+                .chunks(2)
+                .map(|pair| {
+                    let inner_nonce = parse_hex_bytes(&pair[0]);
+                    let pt = parse_hex_bytes(&pair[1]);
+                    hex_of(&sender.seal(&inner_nonce, &pt))
+                })
+                .collect();
+            println!("{}", wires.join(" "));
+        }
+        "ratchet_aead_open" => {
+            // chaos_core ratchet_aead_open <master_hex> <nonce_hex> <aad_hex> <n_maps> <wire_hex>...
+            // Drives a receiver session over the wires in order; prints each plaintext hex
+            // space-separated, or "INVALID" for the whole run if ANY message fails to open.
+            let master = parse_hex_bytes(&args[2]);
+            let nonce = parse_hex_bytes(&args[3]);
+            let aad = parse_hex_bytes(&args[4]);
+            let n_maps: usize = args[5].parse().expect("bad n_maps");
+            let mut receiver = RatchetAeadReceiver::new(&master, &nonce, &aad, n_maps);
+            let mut outs: Vec<String> = Vec::new();
+            let mut ok = true;
+            for w in &args[6..] {
+                let wire = parse_hex_bytes(w);
+                match receiver.open(&wire) {
+                    Some(pt) => outs.push(hex_of(&pt)),
+                    None => {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if ok {
+                println!("{}", outs.join(" "));
+            } else {
+                println!("INVALID");
+            }
+        }
         "benchmm" => {
             // chaos_core benchmm <n_maps> <mbytes>  -> throughput of the REAL shipped combiner.
             let n_maps: usize = args.get(2).map(|s| s.parse().unwrap()).unwrap_or(DEFAULT_N_MAPS);
@@ -228,6 +277,8 @@ fn main() {
             eprintln!("       chaos_core aead_open <key_hex> <aad_hex> <blob_hex> <n_maps>");
             eprintln!("       chaos_core stream_seal <key_hex> <salt_hex> <aad_hex> <n_maps> <chunk_hex>...");
             eprintln!("       chaos_core stream_open <key_hex> <aad_hex> <n_maps> <blob_hex>");
+            eprintln!("       chaos_core ratchet_aead_seal <master_hex> <nonce_hex> <aad_hex> <n_maps> <inner_nonce_hex> <pt_hex>...");
+            eprintln!("       chaos_core ratchet_aead_open <master_hex> <nonce_hex> <aad_hex> <n_maps> <wire_hex>...");
             eprintln!("       chaos_core bench <mbytes>");
             eprintln!("       chaos_core benchmm <n_maps> <mbytes>");
             eprintln!("       chaos_core timing <keys>");

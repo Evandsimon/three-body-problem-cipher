@@ -164,3 +164,60 @@ def test_python_opens_rust_sealed_stream():
     opened = open_stream(bytes.fromhex(c["key"]), rust_blob, aad=bytes.fromhex(c["aad"]),
                          n_maps=c["n_maps"])
     assert opened == bytes.fromhex(c["plaintext"]), "Python could not open the Rust-sealed stream."
+
+
+def test_rust_matches_kat_ratchet_aead_seal():
+    """The ratchet session AEAD (Phase 8.3): driving a Rust sender session through the 3 KAT messages
+    (with the pinned per-message inner nonces) must reproduce all 3 frozen wires byte-for-byte —
+    proves the one-way chain, per-message key derivation, index-bound aad and inner blob all match
+    Python across two chain seams (index 0->1->2)."""
+    c = _frozen("ratchet_aead")
+    pairs = [x for pair in zip(c["inner_nonces"], c["plaintexts"]) for x in pair]
+    got = _rust("ratchet_aead_seal", c["master"], c["nonce"], c["aad"], c["n_maps"], *pairs)
+    assert got == " ".join(c["wires"]), "Rust ratchet_aead_seal diverged from the frozen KAT wires."
+
+
+def test_rust_ratchet_aead_open_roundtrip():
+    c = _frozen("ratchet_aead")
+    got = _rust("ratchet_aead_open", c["master"], c["nonce"], c["aad"], c["n_maps"], *c["wires"])
+    assert got == " ".join(c["plaintexts"]), "Rust ratchet_aead_open did not recover the plaintexts."
+
+
+def test_rust_ratchet_aead_open_rejects_tamper():
+    """Flip a byte in the first wire's inner ciphertext: the inner committing AEAD must reject it,
+    so the whole run reports INVALID."""
+    c = _frozen("ratchet_aead")
+    wires = list(c["wires"])
+    bad = bytearray(bytes.fromhex(wires[0]))
+    bad[8 + 16 + 32 + 1] ^= 0x01     # index(8) || nonce(16) || commit(32) || [ct...] — flip first ct byte
+    wires[0] = bad.hex()
+    got = _rust("ratchet_aead_open", c["master"], c["nonce"], c["aad"], c["n_maps"], *wires)
+    assert got == "INVALID", "Rust ratchet_aead_open accepted a tampered session message."
+
+
+def test_rust_ratchet_aead_open_rejects_wire_index_tamper():
+    """The message index is sealed into the inner aad; bumping it on the wire must fail to open."""
+    c = _frozen("ratchet_aead")
+    wires = list(c["wires"])
+    bad = bytearray(bytes.fromhex(wires[0]))
+    bad[7] ^= 0x01                   # bump the 8-byte index from 0 to 1
+    wires[0] = bad.hex()
+    got = _rust("ratchet_aead_open", c["master"], c["nonce"], c["aad"], c["n_maps"], *wires)
+    assert got == "INVALID", "Rust ratchet_aead_open accepted a tampered wire index."
+
+
+def test_python_opens_rust_sealed_ratchet_aead():
+    """Interop: a session sealed by the Rust core must open, in order, under the Python session shell."""
+    import sys
+    sys.path.insert(0, _ROOT)
+    from ratchet_aead import ReceiverSession  # noqa: E402
+
+    c = _frozen("ratchet_aead")
+    pairs = [x for pair in zip(c["inner_nonces"], c["plaintexts"]) for x in pair]
+    rust_wires = _rust("ratchet_aead_seal", c["master"], c["nonce"], c["aad"],
+                       c["n_maps"], *pairs).split()
+    rx = ReceiverSession(bytes.fromhex(c["master"]), bytes.fromhex(c["nonce"]),
+                         aad=bytes.fromhex(c["aad"]))
+    opened = [rx.open(bytes.fromhex(w)) for w in rust_wires]
+    assert opened == [bytes.fromhex(p) for p in c["plaintexts"]], \
+        "Python could not open the Rust-sealed session."

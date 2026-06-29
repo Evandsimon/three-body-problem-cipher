@@ -102,11 +102,16 @@ class _Session:
 class SenderSession(_Session):
     """Seal a sequence of messages with per-message forward secrecy."""
 
-    def seal(self, plaintext: bytes) -> bytes:
+    def seal(self, plaintext: bytes, inner_nonce: bytes | None = None) -> bytes:
         """Seal the next message. Returns index(8) || committing-AEAD blob. After this returns, the
-        key for THIS message is gone from the session — only the live message onward is recoverable."""
+        key for THIS message is gone from the session — only the live message onward is recoverable.
+
+        `inner_nonce` is optional and only for determinism in a known-answer / Rust-parity vector
+        (parallels aead.seal's `nonce=`). In production leave it None: the inner AEAD draws a fresh
+        random nonce. It is safe to pin here because every message already gets a UNIQUE key from the
+        one-way chain, so a fixed inner nonce can never cause keystream reuse across messages."""
         i, msg_key = self._step()
-        blob = seal(msg_key, plaintext, aad=_bind_aad(self._aad, i))
+        blob = seal(msg_key, plaintext, aad=_bind_aad(self._aad, i), nonce=inner_nonce)
         del msg_key
         return i.to_bytes(8, "big") + blob
 

@@ -49,6 +49,7 @@ from commit import key_commitment  # noqa: E402
 from engine import M, DiscreteChaoticEngine, _finalize  # noqa: E402
 from multimap import MultiMapEngine  # noqa: E402
 from ratchet import RatchetEngine  # noqa: E402
+from ratchet_aead import SenderSession  # noqa: E402
 from siv import seal_siv  # noqa: E402
 from streaming import seal_stream  # noqa: E402
 
@@ -139,6 +140,27 @@ def compute_vectors() -> dict:
     v["stream"] = {"key": _KEY_BYTES.hex(), "salt": stream_salt.hex(), "aad": stream_aad.hex(),
                    "n_maps": stream_nmaps, "chunks": [c.hex() for c in stream_chunks],
                    "plaintext": b"".join(stream_chunks).hex(), "blob": stream_blob.hex()}
+
+    # 9. ratchet_aead — the forward-secret SESSION AEAD (ratchet_aead.py). A 3-message session whose
+    #    index advances 0->1->2, so the vector freezes the one-way chain across TWO seams (chain_0 ->
+    #    chain_1 -> chain_2). The inner committing AEAD's nonce is the only nondeterminism, so we PIN
+    #    one fixed inner nonce per message (safe: each message already has a unique chain-derived key).
+    #    The blobs freeze the whole stack: chain init, per-message key derivation, index-bound aad, and
+    #    the full committing-AEAD blob for each message.
+    ra_master = _KEY_BYTES
+    ra_session_nonce = b"chaos-kat-ra-non1"          # session nonce (feeds chain_0)
+    ra_session_aad = b"kat-ra-session-aad"           # session-level aad
+    ra_nmaps = 4
+    ra_messages = [b"first session message", b"", b"third message, the final one here"]
+    ra_inner_nonces = [b"ra-kat-nonce-000", b"ra-kat-nonce-001", b"ra-kat-nonce-002"]  # 16 bytes each
+    ra_sender = SenderSession(ra_master, ra_session_nonce, aad=ra_session_aad)
+    ra_wires = [ra_sender.seal(m, inner_nonce=n)
+                for m, n in zip(ra_messages, ra_inner_nonces)]
+    v["ratchet_aead"] = {"master": ra_master.hex(), "nonce": ra_session_nonce.hex(),
+                         "aad": ra_session_aad.hex(), "n_maps": ra_nmaps,
+                         "inner_nonces": [n.hex() for n in ra_inner_nonces],
+                         "plaintexts": [m.hex() for m in ra_messages],
+                         "wires": [w.hex() for w in ra_wires]}
 
     return v
 
