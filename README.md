@@ -16,6 +16,8 @@ Built as a research artifact. Attacked hard from every angle. Wrapped in two ind
 
 > **⚠️ UNVETTED — do not protect real data with this.** No outside cryptographer has reviewed it. The claims are measured, not proven. See [`REPORT.md`](REPORT.md) and [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
+📊 **[Open the visual scorecard →](docs/scorecard.html)** — speed bars, head-to-head vs AES-256-GCM, radar chart. No internet needed, self-contained HTML.
+
 ## Design rationale
 
 Chaos-based encryption has been tried before — and most attempts break because chaotic systems in floating-point are not truly deterministic across machines, or because the map structure leaks through the output. This project addresses both:
