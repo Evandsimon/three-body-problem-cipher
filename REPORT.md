@@ -58,7 +58,7 @@ Three things this project gets right that most chaos ciphers don't:
 
 | # | Test | Result | Verdict |
 |---|------|--------|---------|
-| 3 | Two-time pad (nonce reuse) | C1⊕C2 = P1⊕P2, both plaintexts fully recovered | ❌ Broken (nonces are mandatory — this is true of ALL stream ciphers) |
+| 3 | Two-time pad (nonce reuse) | C1⊕C2 = P1⊕P2, both plaintexts recovered | ⚠️ Nonces mandatory — universal to ALL stream ciphers (AES-GCM, ChaCha20, etc.) |
 | 4 | Known-plaintext state recovery | Map is invertible; works at small scale. At full scale: state space ~2⁵⁰⁸, MITM ~2²⁵⁴ | ✅ Key-size-safe at full scale |
 | 5 | Meet-in-the-middle (core cryptanalysis) | Generalized MITM at N=4 maps: ~2²⁵⁴ time AND memory | ✅ Infeasible |
 | 6 | Differential analysis | Single-bit input diffs → output at noise floor; avalanche P∈[0.470,0.528] | ✅ No usable differential |

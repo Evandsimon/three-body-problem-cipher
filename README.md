@@ -122,7 +122,7 @@ for a in attacks/*.py; do python3 "$a"; done
 
 | Attack | What it tries | Result at full scale |
 |--------|--------------|---------------------|
-| Two-time pad | Reuse key+nonce → recover plaintext | ❌ Broken (nonces are mandatory) |
+| Two-time pad | Reuse key+nonce → recover plaintext | ⚠️ Nonces mandatory (true of ALL stream ciphers — AES-GCM, ChaCha20, etc.) |
 | Known plaintext | Recover state from output | Survives (state space ~2⁵⁰⁸, MITM ~2²⁵⁴) |
 | Core cryptanalysis | Bias hunt + meet-in-the-middle | Survives (MITM ~2²⁵⁴ time+memory) |
 | Differential | Single-bit input → output bias | Survives (at noise floor) |
