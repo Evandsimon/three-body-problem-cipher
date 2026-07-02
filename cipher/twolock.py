@@ -68,7 +68,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.exceptions import InvalidTag as _CryptoInvalidTag
 
-import aead as _outer
+import cipher.aead as _outer
 
 # Re-export so callers catch ONE exception type regardless of which lock rejected.
 InvalidTag = _outer.InvalidTag

@@ -33,10 +33,10 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import aead  # noqa: E402
+import cipher.aead as aead  # noqa: E402
 from cryptography.exceptions import InvalidTag as CryptoInvalidTag  # noqa: E402
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: E402
-from twolock import (  # noqa: E402
+from cipher.twolock import (  # noqa: E402
     INNER_NONCE_LEN,
     InvalidTag,
     _derive_keys,

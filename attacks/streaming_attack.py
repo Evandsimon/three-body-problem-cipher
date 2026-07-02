@@ -13,7 +13,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from streaming import HEADER_LEN, InvalidTag, open_stream, seal_stream  # noqa: E402
+from cipher.streaming import HEADER_LEN, InvalidTag, open_stream, seal_stream  # noqa: E402
 
 KEY = b"streaming-attack-master-key"
 PARTS = [b"move the gold to vault 1. ", b"hold position. ", b"await my signal. ", b"END"]

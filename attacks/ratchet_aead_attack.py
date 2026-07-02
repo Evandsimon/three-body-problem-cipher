@@ -20,7 +20,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ratchet_aead import ReceiverSession, SenderSession  # noqa: E402
+from cipher.ratchet_aead import ReceiverSession, SenderSession  # noqa: E402
 
 MASTER = b"ratchet-aead-attack-master-key"
 NONCE = b"ratchet-aead-attack-nonce"

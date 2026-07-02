@@ -33,8 +33,8 @@ STILL UNVETTED. This defeats the naive per-map attack; it is not a proof of secu
 
 from __future__ import annotations
 
-from constants import DEFAULT_N_MAPS
-from engine import DiscreteChaoticEngine, _kdf_hash, _derive_seed_control
+from cipher.constants import DEFAULT_N_MAPS
+from cipher.engine import DiscreteChaoticEngine, _kdf_hash, _derive_seed_control
 
 
 class MultiMapEngine:

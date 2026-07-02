@@ -33,7 +33,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from engine import finalize, M, OUTPUT_BYTES_PER_STEP, DiscreteChaoticEngine  # noqa: E402
+from cipher.engine import finalize, M, OUTPUT_BYTES_PER_STEP, DiscreteChaoticEngine  # noqa: E402
 
 OUT_BITS = 64              # finalize emits a 64-bit word
 STATE_BITS = M.bit_length()  # 127

@@ -17,7 +17,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from engine import DiscreteChaoticEngine  # noqa: E402
+from cipher.engine import DiscreteChaoticEngine  # noqa: E402
 
 KEY = 555555555555555555
 CTRL = 777777777777777777

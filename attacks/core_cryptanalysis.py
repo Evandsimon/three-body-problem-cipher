@@ -41,9 +41,9 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from engine import M  # noqa: E402
-from constants import DEFAULT_N_MAPS  # noqa: E402
-from multimap import MultiMapEngine  # noqa: E402
+from cipher.engine import M  # noqa: E402
+from cipher.constants import DEFAULT_N_MAPS  # noqa: E402
+from cipher.multimap import MultiMapEngine  # noqa: E402
 from known_plaintext import SmallPWLCM  # noqa: E402
 
 KEY = b"clever-burglar-cryptanalysis-key"

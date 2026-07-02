@@ -35,8 +35,8 @@ from __future__ import annotations
 
 import hashlib
 
-from constants import DEFAULT_N_MAPS
-from engine import DiscreteChaoticEngine
+from cipher.constants import DEFAULT_N_MAPS
+from cipher.engine import DiscreteChaoticEngine
 
 
 class SeekableCTR:

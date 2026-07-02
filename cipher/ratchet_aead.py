@@ -44,8 +44,8 @@ Validated in attacks/ratchet_aead_attack.py.
 """
 from __future__ import annotations
 
-from aead import InvalidTag, open_, seal
-from ratchet import _kdf
+from cipher.aead import InvalidTag, open_, seal
+from cipher.ratchet import _kdf
 
 _V = b"chaos-ratchet-aead-v1|"
 

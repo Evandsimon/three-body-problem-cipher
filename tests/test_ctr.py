@@ -8,7 +8,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ctr import SeekableCTR  # noqa: E402
+from cipher.ctr import SeekableCTR  # noqa: E402
 
 KEY = b"a shared secret of arbitrary length!!"
 NONCE = b"unique-nonce-0001"

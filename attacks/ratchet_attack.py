@@ -25,7 +25,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ratchet import RatchetEngine                       # noqa: E402
+from cipher.ratchet import RatchetEngine                       # noqa: E402
 
 KEY = b"ratchet-attack-master-key"
 NONCE = b"ratchet-attack-nonce"

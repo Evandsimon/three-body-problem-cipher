@@ -23,7 +23,7 @@ import random
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from engine import DiscreteChaoticEngine, M, HALF, DEAD_STATE_FIX  # noqa: E402
+from cipher.engine import DiscreteChaoticEngine, M, HALF, DEAD_STATE_FIX  # noqa: E402
 
 
 def _advance(eng):

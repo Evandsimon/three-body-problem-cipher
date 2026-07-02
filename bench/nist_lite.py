@@ -14,7 +14,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ratchet import RatchetEngine  # noqa: E402  -- the SHIPPED keystream (4-map under auto-rekey)
+from cipher.ratchet import RatchetEngine  # noqa: E402  -- the SHIPPED keystream (4-map under auto-rekey)
 
 
 def _bits(data: bytes):

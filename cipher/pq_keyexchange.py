@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import hashlib
 
-from keyexchange import DH_BYTES, DHParty
+from cipher.keyexchange import DH_BYTES, DHParty
 
 # ML-KEM lives in cryptography's OpenSSL 3.5+ backend. Guard the import so the rest of the project
 # (and CI on an older OpenSSL) still loads; callers get a clear error, tests auto-skip.
@@ -140,7 +140,7 @@ def hybrid_agree(initiator: HybridInitiator, responder: HybridResponder,
 
 if __name__ == "__main__":
     _require_mlkem()
-    from aead import open_, seal
+    from cipher.aead import open_, seal
 
     # 1) Alice & Bob have never shared a secret. Two messages, and they agree a key that resists BOTH
     #    a passive eavesdropper today AND a future quantum computer replaying the recording.

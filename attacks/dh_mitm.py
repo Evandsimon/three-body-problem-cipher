@@ -23,8 +23,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import hashlib  # noqa: E402
 
-from aead import InvalidTag, open_, seal  # noqa: E402
-from keyexchange import DHParty  # noqa: E402
+from cipher.aead import InvalidTag, open_, seal  # noqa: E402
+from cipher.keyexchange import DHParty  # noqa: E402
 
 
 def fingerprint(public: int) -> str:
@@ -44,7 +44,7 @@ def demo_passive_eavesdropper_fails():
     # Eve has the publics but no private exponent; she cannot derive the shared secret without
     # solving discrete log. Her best guess from public info alone (e.g. hashing the publics) is
     # NOT the real key:
-    from keyexchange import P
+    from cipher.keyexchange import P
     eve_guess = hashlib.sha512(
         b"chaos-pwlcm-v1|dh-shared-key||"
         + ((alice.public * bob.public) % P).to_bytes(256, "big")

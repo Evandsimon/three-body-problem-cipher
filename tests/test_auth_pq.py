@@ -9,14 +9,14 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from auth_pq_keyexchange import (  # noqa: E402
+from cipher.auth_pq_keyexchange import (  # noqa: E402
     PQ_AVAILABLE,
     Identity,
     Initiator,
     Responder,
     authenticated_pq_agree,
 )
-from keyexchange import DHParty  # noqa: E402
+from cipher.keyexchange import DHParty  # noqa: E402
 
 pytestmark = pytest.mark.skipif(
     not PQ_AVAILABLE, reason="ML-KEM/ML-DSA need cryptography w/ OpenSSL 3.5+")
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(
 if PQ_AVAILABLE:
     from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.primitives.asymmetric import mlkem
-    from auth_pq_keyexchange import _SIG_CTX_RESPONDER, _Msg2, _transcript
+    from cipher.auth_pq_keyexchange import _SIG_CTX_RESPONDER, _Msg2, _transcript
 
 
 def _session():
@@ -105,14 +105,14 @@ def test_responder_rejects_forged_initiator_sig():
     msg2 = bob.respond(msg1)
     alice.finish(msg2)                       # Alice computes her real sig (discarded below)
     # Mallory submits a signature made with her own key in place of Alice's.
-    from auth_pq_keyexchange import _SIG_CTX_INITIATOR
+    from cipher.auth_pq_keyexchange import _SIG_CTX_INITIATOR
     forged = mid._sign(_SIG_CTX_INITIATOR + bob._transcript)
     with pytest.raises(InvalidSignature):
         bob.confirm(forged)
 
 
 def test_end_to_end_with_chaos_aead():
-    from aead import open_, seal
+    from cipher.aead import open_, seal
     _aid, _bid, alice, bob = _session()
     key = authenticated_pq_agree(alice, bob)
     assert open_(bob.key, seal(key, b"authenticated and quantum-safe")) == b"authenticated and quantum-safe"

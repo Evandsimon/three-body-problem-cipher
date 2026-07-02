@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import hashlib
 
-from keyexchange import DHParty
+from cipher.keyexchange import DHParty
 
 _KDF_LABEL = b"chaos-pwlcm-v1|auth-dh|triple-dh-v1"
 
@@ -108,7 +108,7 @@ def authenticated_agree(alice: AuthHandshake, bob: AuthHandshake, info: bytes = 
 
 
 if __name__ == "__main__":
-    from aead import open_, seal
+    from cipher.aead import open_, seal
 
     # 0) One-time setup: long-term identities. Alice & Bob verify each other's fingerprint ONCE
     #    (in person / out-of-band), then store the public. After that, no manual check is needed.

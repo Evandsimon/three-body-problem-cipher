@@ -29,13 +29,13 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from keyexchange import DHParty  # noqa: E402
+from cipher.keyexchange import DHParty  # noqa: E402
 
 try:
     from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.primitives.asymmetric import mldsa, mlkem  # noqa: F401
-    from aead import open_, seal
-    from auth_pq_keyexchange import (
+    from cipher.aead import open_, seal
+    from cipher.auth_pq_keyexchange import (
         _SIG_CTX_RESPONDER,
         _combine,
         _transcript,
@@ -72,7 +72,7 @@ def _forge_responder_msg(alice_pub, bob_pub, msg1, signer_identity, *, dh_for_r=
     _pq, kem_ct = peer_kem.encapsulate()
     transcript = _transcript(alice_pub, bob_pub, msg1.dh_i, msg1.kem_pk_i, eph.public, kem_ct)
     sig_r = signer_identity._sign(_SIG_CTX_RESPONDER + transcript)
-    from auth_pq_keyexchange import _Msg2
+    from cipher.auth_pq_keyexchange import _Msg2
     return _Msg2(eph.public, kem_ct, sig_r), eph
 
 
@@ -163,7 +163,7 @@ def part4_transcript_tamper() -> bool:
     bob = Responder(bid, aid.public)
     msg1 = alice.start()
     msg2 = bob.respond(msg1)
-    from auth_pq_keyexchange import _Msg2
+    from cipher.auth_pq_keyexchange import _Msg2
 
     caught = 0
     trials = 0

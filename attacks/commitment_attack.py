@@ -26,10 +26,10 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from aead import InvalidTag, open_ as aead_open  # noqa: E402
-from aead import seal as aead_seal  # noqa: E402
-from commit import key_commitment  # noqa: E402
-from siv import open_siv, seal_siv  # noqa: E402
+from cipher.aead import InvalidTag, open_ as aead_open  # noqa: E402
+from cipher.aead import seal as aead_seal  # noqa: E402
+from cipher.commit import key_commitment  # noqa: E402
+from cipher.siv import open_siv, seal_siv  # noqa: E402
 
 _BAD = InvalidTag
 

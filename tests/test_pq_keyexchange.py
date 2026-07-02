@@ -9,7 +9,7 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from pq_keyexchange import (  # noqa: E402
+from cipher.pq_keyexchange import (  # noqa: E402
     MLKEM_AVAILABLE,
     HybridInitiator,
     HybridResponder,
@@ -71,7 +71,7 @@ def test_invalid_dh_peer_rejected():
 
 
 def test_end_to_end_with_aead():
-    from aead import open_, seal
+    from cipher.aead import open_, seal
     alice, bob = HybridInitiator(), HybridResponder()
     kem_ct, key_bob = bob.respond(alice.dh_public, alice.kem_public)
     key_alice = alice.shared_key(bob.dh_public, kem_ct)

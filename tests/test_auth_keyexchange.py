@@ -11,9 +11,9 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from aead import InvalidTag, open_, seal  # noqa: E402
-from auth_keyexchange import AuthHandshake, Identity, authenticated_agree  # noqa: E402
-from keyexchange import P  # noqa: E402
+from cipher.aead import InvalidTag, open_, seal  # noqa: E402
+from cipher.auth_keyexchange import AuthHandshake, Identity, authenticated_agree  # noqa: E402
+from cipher.keyexchange import P  # noqa: E402
 
 
 # --- correctness --------------------------------------------------------------

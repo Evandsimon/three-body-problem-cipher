@@ -65,26 +65,26 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from aead import tag  # noqa: E402
-from commit import key_commitment  # noqa: E402
-from engine import finalize, M, DiscreteChaoticEngine  # noqa: E402
-from keyexchange import P, DHParty  # noqa: E402
-from pq_keyexchange import (  # noqa: E402
+from cipher.aead import tag  # noqa: E402
+from cipher.commit import key_commitment  # noqa: E402
+from cipher.engine import finalize, M, DiscreteChaoticEngine  # noqa: E402
+from cipher.keyexchange import P, DHParty  # noqa: E402
+from cipher.pq_keyexchange import (  # noqa: E402
     MLKEM_AVAILABLE, _combine, _transcript, mlkem,
 )
-from auth_pq_keyexchange import (  # noqa: E402
+from cipher.auth_pq_keyexchange import (  # noqa: E402
     PQ_AVAILABLE as MLDSA_AVAILABLE,
     PublicIdentity as AuthPublicIdentity,
     _combine as _auth_combine,
     _transcript as _auth_transcript,
     mldsa as _auth_mldsa,
 )
-from multimap import MultiMapEngine  # noqa: E402
-from ratchet import RatchetEngine  # noqa: E402
-from ratchet_aead import SenderSession  # noqa: E402
-from siv import seal_siv  # noqa: E402
-from streaming import seal_stream  # noqa: E402
-from twolock import seal_twolock  # noqa: E402
+from cipher.multimap import MultiMapEngine  # noqa: E402
+from cipher.ratchet import RatchetEngine  # noqa: E402
+from cipher.ratchet_aead import SenderSession  # noqa: E402
+from cipher.siv import seal_siv  # noqa: E402
+from cipher.streaming import seal_stream  # noqa: E402
+from cipher.twolock import seal_twolock  # noqa: E402
 
 VECTORS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vectors.json")
 

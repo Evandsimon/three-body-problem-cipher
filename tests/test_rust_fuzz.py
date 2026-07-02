@@ -25,9 +25,9 @@ _ROOT = os.path.dirname(_HERE)
 _BIN = os.path.join(_ROOT, "rust", "target", "release", "chaos_core")
 
 sys.path.insert(0, _ROOT)
-from engine import M, DiscreteChaoticEngine  # noqa: E402
-from multimap import MultiMapEngine  # noqa: E402
-from ratchet import RatchetEngine  # noqa: E402
+from cipher.engine import M, DiscreteChaoticEngine  # noqa: E402
+from cipher.multimap import MultiMapEngine  # noqa: E402
+from cipher.ratchet import RatchetEngine  # noqa: E402
 
 
 def _have_binary() -> bool:

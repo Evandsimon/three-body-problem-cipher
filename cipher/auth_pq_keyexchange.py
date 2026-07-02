@@ -61,7 +61,7 @@ from __future__ import annotations
 import hashlib
 from typing import NamedTuple
 
-from keyexchange import DH_BYTES, DHParty
+from cipher.keyexchange import DH_BYTES, DHParty
 
 # Post-quantum primitives live in cryptography's OpenSSL 3.5+ backend. Guard the imports so the rest
 # of the project still loads on an older OpenSSL; callers get a clear error and tests auto-skip.
@@ -259,7 +259,7 @@ def authenticated_pq_agree(initiator: Initiator, responder: Responder) -> bytes:
 
 if __name__ == "__main__":
     _require_pq()
-    from aead import open_, seal
+    from cipher.aead import open_, seal
 
     # 0) One-time setup: long-term identities. Alice and Bob verify each other's fingerprint ONCE.
     alice_id, bob_id = Identity(), Identity()

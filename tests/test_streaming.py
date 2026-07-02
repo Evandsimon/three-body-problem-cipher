@@ -11,8 +11,8 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from aead import InvalidTag  # noqa: E402
-from streaming import (  # noqa: E402
+from cipher.aead import InvalidTag  # noqa: E402
+from cipher.streaming import (  # noqa: E402
     HEADER_LEN,
     StreamOpener,
     StreamSealer,

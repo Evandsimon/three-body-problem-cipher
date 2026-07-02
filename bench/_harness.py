@@ -3,9 +3,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from constants import DEFAULT_N_MAPS  # noqa: E402
-from multimap import MultiMapEngine  # noqa: E402
-from ratchet import RatchetEngine  # noqa: E402
+from cipher.constants import DEFAULT_N_MAPS  # noqa: E402
+from cipher.multimap import MultiMapEngine  # noqa: E402
+from cipher.ratchet import RatchetEngine  # noqa: E402
 
 
 def build_multimap(key: bytes = None, nonce: bytes = None, n_maps: int = DEFAULT_N_MAPS):

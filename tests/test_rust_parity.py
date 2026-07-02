@@ -120,7 +120,7 @@ def test_python_opens_rust_sealed_blob():
     implementations are wire-compatible, not just internally self-consistent."""
     import sys
     sys.path.insert(0, _ROOT)
-    from aead import open_  # noqa: E402
+    from cipher.aead import open_  # noqa: E402
 
     c = _frozen("aead")
     rust_blob = bytes.fromhex(_rust("aead_seal", c["key"], c["nonce"], c["aad"],
@@ -156,7 +156,7 @@ def test_python_opens_rust_sealed_stream():
     """Interop: a stream sealed by Rust must open under the Python streaming shell."""
     import sys
     sys.path.insert(0, _ROOT)
-    from streaming import open_stream  # noqa: E402
+    from cipher.streaming import open_stream  # noqa: E402
 
     c = _frozen("stream")
     rust_blob = bytes.fromhex(_rust("stream_seal", c["key"], c["salt"], c["aad"],
@@ -210,7 +210,7 @@ def test_python_opens_rust_sealed_ratchet_aead():
     """Interop: a session sealed by the Rust core must open, in order, under the Python session shell."""
     import sys
     sys.path.insert(0, _ROOT)
-    from ratchet_aead import ReceiverSession  # noqa: E402
+    from cipher.ratchet_aead import ReceiverSession  # noqa: E402
 
     c = _frozen("ratchet_aead")
     pairs = [x for pair in zip(c["inner_nonces"], c["plaintexts"]) for x in pair]
@@ -257,7 +257,7 @@ def test_python_opens_rust_sealed_twolock():
     Python's `cryptography` library, not just internally self-consistent."""
     import sys
     sys.path.insert(0, _ROOT)
-    from twolock import open_twolock  # noqa: E402
+    from cipher.twolock import open_twolock  # noqa: E402
 
     c = _frozen("twolock")
     for alg in c["blobs"]:
@@ -340,8 +340,8 @@ def test_rust_python_hybrid_handshake_both_ways():
     import os
     import sys
     sys.path.insert(0, _ROOT)
-    from keyexchange import P, DHParty  # noqa: E402
-    from pq_keyexchange import _combine, _transcript  # noqa: E402
+    from cipher.keyexchange import P, DHParty  # noqa: E402
+    from cipher.pq_keyexchange import _combine, _transcript  # noqa: E402
 
     info = b"interop"
 
@@ -478,8 +478,8 @@ def test_rust_python_auth_handshake_both_ways():
     import os
     import sys
     sys.path.insert(0, _ROOT)
-    from keyexchange import DHParty  # noqa: E402
-    from auth_pq_keyexchange import (  # noqa: E402
+    from cipher.keyexchange import DHParty  # noqa: E402
+    from cipher.auth_pq_keyexchange import (  # noqa: E402
         PublicIdentity, _SIG_CTX_INITIATOR, _SIG_CTX_RESPONDER, _combine as _acombine,
         _transcript as _atranscript,
     )

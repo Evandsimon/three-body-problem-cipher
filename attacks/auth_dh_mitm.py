@@ -19,8 +19,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from aead import InvalidTag, open_, seal  # noqa: E402
-from auth_keyexchange import AuthHandshake, Identity  # noqa: E402
+from cipher.aead import InvalidTag, open_, seal  # noqa: E402
+from cipher.auth_keyexchange import AuthHandshake, Identity  # noqa: E402
 
 
 def demo_legit_handshake_works():

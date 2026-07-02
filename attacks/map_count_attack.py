@@ -25,8 +25,8 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from engine import M                            # noqa: E402
-from multimap import MultiMapEngine             # noqa: E402
+from cipher.engine import M                            # noqa: E402
+from cipher.multimap import MultiMapEngine             # noqa: E402
 
 KEY = b"map-count-probe-key"
 NONCE = b"map-count-probe-nonce"

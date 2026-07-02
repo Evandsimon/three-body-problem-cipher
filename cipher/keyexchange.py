@@ -119,7 +119,7 @@ def agree_key(alice: DHParty, bob: DHParty, info: bytes = b"") -> bytes:
 
 
 if __name__ == "__main__":
-    from aead import open_, seal
+    from cipher.aead import open_, seal
 
     # 1) Alice and Bob have NEVER shared a secret. They each make a keypair...
     alice, bob = DHParty(), DHParty()

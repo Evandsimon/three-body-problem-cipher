@@ -5,8 +5,8 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from aead import open_, seal  # noqa: E402
-from keyexchange import P, DHParty, agree_key  # noqa: E402
+from cipher.aead import open_, seal  # noqa: E402
+from cipher.keyexchange import P, DHParty, agree_key  # noqa: E402
 
 
 def test_both_parties_derive_same_key():

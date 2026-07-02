@@ -3,7 +3,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from multimap import MultiMapEngine  # noqa: E402
+from cipher.multimap import MultiMapEngine  # noqa: E402
 
 KEY = b"a shared secret of arbitrary length!!"
 NONCE = b"unique-nonce-0001"

@@ -9,8 +9,8 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from aead import InvalidTag  # noqa: E402
-from ratchet_aead import ReceiverSession, SenderSession  # noqa: E402
+from cipher.aead import InvalidTag  # noqa: E402
+from cipher.ratchet_aead import ReceiverSession, SenderSession  # noqa: E402
 
 MASTER = b"a forward-secret session master key!!"
 NONCE = b"session-nonce-aaaa"

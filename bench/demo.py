@@ -9,7 +9,11 @@ IMPORTANT — what this proves and what it does NOT:
              and attacks/. See REPORT.md.
 """
 
-from engine import DiscreteChaoticEngine
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from cipher.engine import DiscreteChaoticEngine
 
 KEY = 987654321012345987654321
 CONTROL_P = 333333333333333222111

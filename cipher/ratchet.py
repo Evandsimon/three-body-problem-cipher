@@ -32,8 +32,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 
-from constants import DEFAULT_N_MAPS
-from multimap import MultiMapEngine
+from cipher.constants import DEFAULT_N_MAPS
+from cipher.multimap import MultiMapEngine
 
 # 64 KiB per epoch: fine-grained forward secrecy (a live capture exposes at most the current epoch
 # onward, never earlier), while the per-epoch re-key cost (a couple of HMACs + fresh map setup) stays

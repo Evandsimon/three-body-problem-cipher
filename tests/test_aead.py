@@ -5,8 +5,8 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from aead import NONCE_LEN, TAG_LEN, InvalidTag, open_, seal  # noqa: E402
-from commit import COMMIT_LEN  # noqa: E402
+from cipher.aead import NONCE_LEN, TAG_LEN, InvalidTag, open_, seal  # noqa: E402
+from cipher.commit import COMMIT_LEN  # noqa: E402
 
 KEY = b"a shared secret of arbitrary length!!"
 MSG = b"the quick brown fox jumps over the lazy dog" * 5

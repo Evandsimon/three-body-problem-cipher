@@ -10,7 +10,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from engine import DiscreteChaoticEngine  # noqa: E402
+from cipher.engine import DiscreteChaoticEngine  # noqa: E402
 
 
 def bench(label, fn, nbytes):
@@ -27,12 +27,12 @@ def chaos(nbytes):
 
 
 def chaos_multimap(nbytes):
-    from multimap import MultiMapEngine
+    from cipher.multimap import MultiMapEngine
     MultiMapEngine(b"benchmark-key", b"benchmark-nonce", n_maps=4).keystream(nbytes)
 
 
 def chaos_ctr(nbytes):
-    from ctr import SeekableCTR
+    from cipher.ctr import SeekableCTR
     SeekableCTR(b"benchmark-key", b"benchmark-nonce", n_maps=4).keystream(nbytes)
 
 
