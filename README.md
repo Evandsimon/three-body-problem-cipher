@@ -1,6 +1,6 @@
 # Three-Body Problem Cipher (3BP)
 
-[![CI](https://github.com/Evansimon77/three-body-problem-cipher/actions/workflows/ci.yml/badge.svg)](https://github.com/Evansimon77/three-body-problem-cipher/actions/workflows/ci.yml)
+[![CI](https://github.com/Evandsimon/three-body-problem-cipher/actions/workflows/ci.yml/badge.svg)](https://github.com/Evandsimon/three-body-problem-cipher/actions/workflows/ci.yml)
 
 *Encryption built on the problem no one can solve.*
 
