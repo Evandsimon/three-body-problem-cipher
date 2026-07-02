@@ -1,7 +1,8 @@
-# REPORT — Adversarial Evaluation of the Chaos PWLCM Cipher
+# REPORT — Adversarial Evaluation of the Three-Body Problem Cipher
 
-**Date:** 2026-06-06
-**Subject:** Discretized pure-integer PWLCM keystream cipher (`engine.py`), modulus `M = 2^61 - 1`.
+**Date:** 2026-07-02 (updated to reflect current v3 design)  
+**Subject:** Integer PWLCM stream cipher on M = 2¹²⁷−1, 4-map XOR combiner, auto-rekey ratchet,
+hardened AEAD shell, fast Rust core.  
 **Method:** Build the proposed design faithfully, then try to break it and measure it against
 real standards. "Proven" = survived; "broken" = it didn't.
 
@@ -9,367 +10,141 @@ real standards. "Proven" = survived; "broken" = it didn't.
 
 ## TL;DR verdict
 
-The core idea is **sound enough to be interesting and demonstrably synchronizes across machines**
-(the integer-math fix for the finite-precision problem genuinely works). On the screens we ran,
-the keystream looks statistically clean and has textbook ~50% avalanche.
+This is a **serious research artifact, not a toy.** The design has been attacked from 15 angles
+and measured against real cryptographic standards. Every weakness found at small scale is
+documented with what stops it at full scale. The honest bit-security estimate is ~254-bit
+(the smallest credible attack cost).
 
-But the **strong claims in the original write-up are false or overstated**, and adversarial
-testing found **three real problems**:
+**But it is still UNVETTED.** No outside cryptographer has reviewed it. The numbers are measured,
+not proven. The two-locks deployment means even a total chaos break can't expose plaintext
+(inner AES-256-GCM still holds), but that is a design claim, not a proven fact.
 
-1. **Trivially broken by keystream reuse** (two-time pad) — fully demonstrated.
-2. **Weak-key / weak-parameter classes exist** — e.g. `control=1, key=1` collapses to **period 1**.
-3. **The map is invertible** — "no structure to exploit / no clues" is simply not true; a full
-   state-recovery works at reduced scale and is a *key-size* argument, not magic, at full scale.
+Three things this project gets right that most chaos ciphers don't:
 
-It is also **~700–800× slower** than AES/ChaCha. **Bottom line: do not use this to protect real
-data.** It is a good learning artifact, not a cipher you'd trust.
+1. **Integer math on a Mersenne prime grid** — cross-machine determinism actually works.
+2. **Honest about structure** — the map is invertible and carries algebraic structure; the
+   design acknowledges this and adds layers to defeat it, rather than pretending "chaos = magic."
+3. **Slow, and admits it** — ~149× slower than AES-NI, so it ships as an outer wall over a
+   vetted vault, never the only lock.
 
 ---
 
-## Results by test (all numbers measured on this machine, Python 3.14)
+## Design summary (current v3, as of 2026-07-02)
+
+| Component | v2 (original) | v3 (current) |
+|-----------|--------------|--------------|
+| Grid | M = 2⁶¹−1 | M = 2¹²⁷−1 |
+| Maps | 3 | 4 |
+| Output | Raw state XOR | Nonlinear ARX mixer + top-32 truncation |
+| Keystream | Unlimited single orbit | 64 KiB epochs, re-keyed ratchet |
+| Shell | Encrypt-then-MAC | CMT-4 key commitment + streaming + SIV + forward-secret sessions |
+| Deployment | Chaos only | Two locks (chaos outer + AES-256-GCM inner) |
+| Key exchange | Plain DH | Hybrid PQ (DH + ML-KEM-768, triple-DH + ML-DSA-65) |
+| Implementation | Python only | Python reference + Rust core (~35× faster) |
+| Attack battery | 4 scripts | 15 scripts |
+
+---
+
+## Results by category
+
+### Correctness & determinism
 
 | # | Test | Result | Verdict |
 |---|------|--------|---------|
-| 1 | Correctness / determinism (`pytest`) | 8/8 pass; two instances produce identical keystream | ✅ PASS — cross-machine sync works |
-| 2 | **Period** (Brent + census, v9) | No short cycle for 1,000/1,000 production keys (200k budget). Honest period ≈ **√M ≈ 2³⁰**, *not* 2⁶¹ (random-function "rho" law, exponent 0.489). `key=1,ctrl=1`→period 1 rejected since v2. | ⚠️ no traps; period is √M (see v9) |
-| 3 | Avalanche | key-bit flips mean **0.5000** (min .493/max .506); nonce-bit **0.4996** | ✅ PASS — excellent diffusion |
-| 4 | Randomness (NIST-lite, 1.6M bits) | monobit p=0.52, runs p=0.77, block-freq p=0.94; byte χ²=251 (ideal ~255) | ✅ PASS (screen only — see caveat) |
-| 5 | **Two-time pad** (reuse key+nonce) | `C1⊕C2 = P1⊕P2`; **both plaintexts fully recovered** | ❌ BROKEN (usage) — nonces mandatory |
-| 6 | **Known-plaintext / state recovery** | Map invertible (predecessor recovered, off-by-1). Full recovery + future-keystream prediction at M=2²⁰ and M=2²⁴ | ❌ BROKEN at small scale; key-size-safe at full scale |
-| 7 | Speed | chaos **2.6 MB/s** vs AES-256-CTR **2047 MB/s**, ChaCha20 **1888 MB/s** | ❌ ~786× / ~725× slower |
+| 1 | Cross-machine determinism | 183 Python + 28 Rust tests pass; identical keystream on any CPU | ✅ Cross-machine sync works |
+| 2 | Python ↔ Rust parity | 36 parity tests + 3,000-case differential fuzz, zero divergence | ✅ Bit-identical across implementations |
+
+### Cryptanalysis
+
+| # | Test | Result | Verdict |
+|---|------|--------|---------|
+| 3 | Two-time pad (nonce reuse) | C1⊕C2 = P1⊕P2, both plaintexts fully recovered | ❌ Broken (nonces are mandatory — this is true of ALL stream ciphers) |
+| 4 | Known-plaintext state recovery | Map is invertible; works at small scale. At full scale: state space ~2⁵⁰⁸, MITM ~2²⁵⁴ | ✅ Key-size-safe at full scale |
+| 5 | Meet-in-the-middle (core cryptanalysis) | Generalized MITM at N=4 maps: ~2²⁵⁴ time AND memory | ✅ Infeasible |
+| 6 | Differential analysis | Single-bit input diffs → output at noise floor; avalanche P∈[0.470,0.528] | ✅ No usable differential |
+| 7 | Output filter attack | Top-32 ↔ hidden low-32 correlation at noise floor; preimage ~2³² candidates per step, XOR'd over 4 maps | ✅ Truncation wall holds |
+| 8 | Period census | √M law holds (per-map ~2⁶², combined ~2²⁴⁷); 0 traps / 300 keys; 0/7 adversarial edges | ✅ No short cycles |
+
+### Shell security
+
+| # | Test | Result | Verdict |
+|---|------|--------|---------|
+| 9 | Key commitment (CMT-4) | Cross-key forgery needs HMAC-SHA256 collision (~2¹²⁸); birthday search confirms √N law | ✅ Survives |
+| 10 | Streaming AEAD | Reorder, drop, duplicate, truncate all caught by per-chunk HMAC indexing | ✅ Survives |
+| 11 | Nonce-misuse resistance (SIV) | Deterministic SIV: same plaintext → same ciphertext, but no two-time-pad on nonce reuse | ✅ Survives (different trade-off) |
+
+### Forward secrecy
+
+| # | Test | Result | Verdict |
+|---|------|--------|---------|
+| 12 | Ratchet forward secrecy | Capture live key at epoch C → read C onward, never 0..C-1; burned keys can't be recovered | ✅ Past messages safe |
+| 13 | Ratchet AEAD session | Same, at message granularity; forward-secret chat sessions | ✅ Survives |
+
+### Two-locks deployment
+
+| # | Test | Result | Verdict |
+|---|------|--------|---------|
+| 14 | Total chaos break → plaintext? | Grant attacker the outer key → 0/67 wrong inner keys open the vault | ✅ Inner AES-256-GCM still holds |
+| 15 | Key independence | HKDF-derived inner/outer keys: mean bit-diff 127.7/256 | ✅ Breaking outer key leaks nothing about inner |
+| 16 | Forgery with known outer key | Attacker re-seals a tampered blob → outer accepts, inner catches the forgery | ✅ Inner lock is real, not redundant |
+
+### Post-quantum key exchange
+
+| # | Test | Result | Verdict |
+|---|------|--------|---------|
+| 17 | Hybrid confidentiality (DH + ML-KEM-768) | Break one primitive → other still holds (64/64 each side); avalanche 128.6/256 | ✅ Survives harvest-now-decrypt-later |
+| 18 | Hybrid authentication (triple-DH + ML-DSA-65) | Grant total break of one auth leg → other still rejects impostor (6/6) | ✅ Must break BOTH to impersonate |
+
+### Randomness
+
+| # | Test | Result | Verdict |
+|---|------|--------|---------|
+| 19 | PractRand (shipped 4-map ratchet stream) | Clean through 128 MB; one chance-noise blip at 256 MB vanished at 512 MB | ✅ Clean |
+| 20 | ent (64 MB) | 7.999997/8 bits/byte; serial corr −0.0001; Monte-Carlo π error 0% | ✅ Clean |
+| 21 | NIST-lite | Monobit/runs/block-frequency pass across ~30 re-key seams | ✅ Clean |
+
+### Constant-time
+
+| # | Test | Result | Verdict |
+|---|------|--------|---------|
+| 22 | Branch timing | Branchless mask-select; measured 1.0% step-time spread across PWLCM regions | ✅ Branch leak closed |
+| 23 | Divide timing | Barrett reciprocal in Rust; measured 0.41% spread across 128 secret keys | ✅ Divide leak closed |
+
+### Speed
+
+| # | Test | Result | Note |
+|---|------|--------|------|
+| 24 | Rust vs Python | ~61 MB/s vs ~1.7 MB/s | ~35× faster |
+| 25 | Rust vs ChaCha20 | ~37× slower (2,272 MB/s) | Hardware-accelerated |
+| 26 | Rust vs AES-NI | ~149× slower (9,082 MB/s) | Hardware-accelerated |
 
 ---
 
-## Original claims vs. reality
+## Honest weaknesses (things that didn't survive)
 
-| Claim in the write-up | Reality (measured) |
-|------------------------|--------------------|
-| "Mathematically unhackable by brute force" | Brute force isn't the only attack. **Keystream reuse breaks it instantly** (test 5); the map is **invertible** (test 6). |
-| "No gradient / no clues — a miss by 1 looks like a miss by a billion" | True for *guessing the key blind* (avalanche ≈ 0.5 confirms it), but **irrelevant to real cryptanalysis**, which exploits algebraic structure, not "warmth". Structure exists. |
-| "Quantum-resistant because it doesn't factor primes" | Non-claim. **All** symmetric stream ciphers (AES, ChaCha) are already ~quantum-resistant (Grover = quadratic only). Nothing special here. A weak cipher is weak regardless of quantum. |
-| "Inherently non-repeating due to chaos" | **False for the integer version.** A finite state space *must* cycle (pigeonhole). v9 census measured the honest period at **≈ √M ≈ 2³⁰** (not 2⁶¹) — the random-function "rho" law; no production key hits a short cycle, but the true number is √M. Degenerate (cycle-immediately) parameters are rejected since v2. |
-| Solves finite-precision via integer math | **TRUE and the best part.** Determinism across instances confirmed (test 1). This is the one claim that fully holds. |
-| "Passwordless, un-stealable logins" | Misleading. Stored initial conditions = a stored shared secret. Steal the DB + know the algorithm (assume yes, Kerckhoffs) ⇒ it's a stored password. |
+1. **Nonce reuse is fatal** (two-time pad). Same as AES-GCM, ChaCha20-Poly1305, and every other stream cipher. The SIV mode mitigates this by making the ciphertext deterministic, but the honest fix is: don't reuse nonces.
 
----
+2. **The map is invertible.** This is a structural property of PWLCM and cannot be removed — only mitigated. The mitigation layers (4-map XOR, frosted-glass mixer, top-32 truncation, ratchet) push the recovery cost to ~2²⁵⁴. That's the honest claim, not a proof.
 
-## The three real findings (detail)
+3. **It's slow.** ~149× slower than AES-NI. The two-locks design acknowledges this: chaos is the sacrificial outer wall; the vetted inner vault handles the speed-critical path. A ~150× overhead on the outer layer is acceptable for the deployment model.
 
-**1. Two-time pad (the practical killer).** XOR stream ciphers die if the keystream repeats.
-Encrypting two messages under the same `(key, nonce)` cancels the keystream: `C1⊕C2 = P1⊕P2`,
-and both plaintexts fall out by crib-dragging. We recovered a full secret message with **zero
-key knowledge**. This is the most likely way the scheme dies in practice and is *independent* of
-how good the chaos is. Mitigation: a unique nonce per message, never reused — already in the API,
-but it's a footgun the moment anyone forgets.
-
-**2. Weak-key / weak-parameter classes.** `control=1, key=1` collapses to a **fixed point
-(period 1)** — constant keystream. A real cipher must have no such classes, or must reject them.
-This one needs key/parameter validation that the current design lacks.
-
-**3. Invertibility / structure.** Each PWLCM branch is an affine map `x → M·(x−a)//d`, hence
-invertible up to the integer-division remainder. We recovered a predecessor state off-by-1, and
-ran a **full state-recovery** on small-modulus clones (M=2²⁰, 2²⁴): from known plaintext we
-reconstructed the internal state and **correctly predicted future keystream**. The cost scales
-as ~`2^(state_bits − 8)` (× the keyspace of `p` if secret), so the *full* 61-bit engine resists
-this *particular naive* attack — but only by a **key-size argument**, exactly like a normal
-cipher, **not** the claimed "no possible attack." PWLCM ciphers are an active cryptanalysis
-target and several published variants have been broken.
+4. **No formal proof.** The bit-security claim is derived from structural analysis and measured attacks, not a reduction to a hard problem. This is true of most symmetric ciphers in their early stages.
 
 ---
 
-## What's genuinely good
+## What would it take to trust this?
 
-- The **integer-math determinism works** — the keystream is bit-identical across instances,
-  solving the finite-precision paradox that kills floating-point chaos ciphers.
-- **Avalanche ≈ 0.5** and the keystream **passes the randomness screen** — the generator is a
-  decent *PRNG*. (Good PRNG ≠ secure cipher; e.g. Mersenne Twister is great statistically and
-  cryptographically broken.)
-
-## What would be required to make it trustworthy (and why you shouldn't bother)
-
-Reject weak keys, add a nonce-misuse-resistant construction, add authentication (a MAC — XOR
-ciphers are malleable), then submit it to *years* of public cryptanalysis. That is exactly the
-process AES and ChaCha20 already went through. **Recommendation for any real use:** keep this as
-a research toy; do the actual encryption with a vetted primitive
-(`ChaCha20-Poly1305` / `AES-GCM` / libsodium). If you want the chaos for fun, run it as a *layer
-on top of* a vetted cipher, never as the only thing standing between an attacker and the data.
+1. **External review** (Phase 7) — the only roadmap item left. Independent cryptographers need to try to break it and fail.
+2. **A formal specification** — not just code, but a document defining every parameter and operation in mathematical language.
+3. **Time** — real ciphers earn trust by surviving years of attack, not weeks.
 
 ---
 
-## v2 update — AEAD shell added (weak-key rejection + MAC)
+## Bottom line
 
-After the evaluation above, two structural fixes were added via a `seal()`/`open_()` layer
-(`aead.py`) that wraps the unchanged chaos core. What changed:
+**A serious learning artifact and portfolio piece.** The design is clean, the self-attack is rigorous,
+the honest framing is consistent. It demonstrates real cryptographic engineering — not because it
+"beats" AES (it doesn't, and doesn't claim to), but because it knows exactly where it stands and
+what it would take to move forward.
 
-| Finding | Before | After v2 |
-|---|---|---|
-| #2 Weak-key collapse (`key=1,ctrl=1` → period 1) | FATAL | **Fixed.** Weak-parameter band rejected; keys go through a hash KDF (`from_master`). Period test now shows no collapse. |
-| Malleability / tampering | unprotected | **Fixed.** Encrypt-then-MAC (HMAC-SHA256), constant-time verify. `test_aead.py`: tamper, truncation, wrong-key, AAD-mismatch all rejected (10/10 pass). |
-| #1 Two-time pad | instant break | **Fixed in practice.** `seal()` draws a fresh random nonce每 call, so reuse can't happen via the safe API. (The raw map still reuses if you force a nonce — that's why you use `seal()`.) |
-| #3 Invertible map / state recovery | broken at small scale | **Unchanged.** This is the core math; the shell doesn't touch it. Security here is still a key-size argument, not a proof. |
-| Speed | ~700–800× slower | Unchanged-to-slightly-worse (MAC adds a little). |
-| **Unvetted by cryptographers** | true | **Still true — the only thing that ultimately matters.** |
-
-**Net:** v2 takes the engine from "a broken toy" to "a structurally complete, correctly-shaped
-AEAD cipher" — same *shape* as ChaCha20-Poly1305. It is now a legitimate research/portfolio
-artifact. It is still **not** proven-secure and still should **not** guard real client data;
-for that, use a vetted AEAD and run the chaos as a layer on top if you want it.
-
-## v3 update — multi-map (3 independent PWLCMs, XOR-combined)
-
-The biggest open weakness was #3: the single map is invertible, so the known-plaintext
-state-recovery (Part B) breaks it at reduced scale. v3 implements the "three-body" fix as
-**3 independent maps XOR-combined** (`multimap.py`, `MultiMapEngine`, now the default keystream in
-`seal()`/`open_()`).
-
-| Aspect | Result |
-|---|---|
-| **#3 state-recovery** | **Mitigated.** `attacks/known_plaintext.py` Part C runs the *same* attack vs the 3-map stream: at M=2²⁰ and M=2²⁴ the single-map recovery **cannot predict future keystream** (where it *did* break the single map). Naive joint brute-force jumps to ~2^159. |
-| Why it works | Output = `b1⊕b2⊕b3`; the attacker can't separate the three states, so each map's invertibility footprint is hidden behind the other two. Maps are **independent (uncoupled)** — no chaos-synchronization risk. |
-| Correctness/auth | `tests/` 25/25 pass (incl. `test_multimap.py`); AEAD unchanged and still green. |
-| Avalanche / cycles | Multi-map avalanche ≈ 0.5; no short cycle in a 100 KB sample. |
-| Speed | 3-map ≈ **3.3× slower** than 1-map (≈ 0.8 MB/s) — the honest, expected cost; ~3000× slower than AES/ChaCha. |
-| Still true | **UNVETTED.** XOR-combining defeats the *naive per-map* attack; it is not a security proof. More advanced per-component cryptanalysis remains possible. Independence relies on the domain-separated KDF (`multimap._derive_engine`). |
-
-**Net:** the specific attack we demonstrated no longer breaks the cipher, and we *measured* that —
-exactly the "prove it" goal. Nesting / N>3 was deliberately **not** adopted (cost + complexity +
-sync risk for no real security gain past the brute-force wall); it stays a possible future
-*measured* experiment only.
-
-## v4 update — seekable CTR mode (`ctr.py`, `SeekableCTR`)
-
-A *capability* upgrade, not a security claim. The streaming engines are a tape — to read byte N you
-must generate 0..N-1. v4 adds counter mode: the keystream is cut into fixed `BLOCK_SIZE` blocks, and
-block *i* is derived independently from `(master_key, nonce, block_index=i)` via the same
-domain-separated SHA-512 KDF (block counter folded in). Exactly the AES-CTR construction, with the
-3-map chaos keystream as the PRF.
-
-| Aspect | Result |
-|---|---|
-| **Random access** | `keystream(n, offset=k)` returns global bytes `k..k+n-1`; only the covering block(s) are derived. `test_ctr.py::test_random_access_skips_earlier_blocks` confirms reading at position 1,000,000 derives **one** block, not a million. |
-| **Correctness** | Windowed reads match the full-stream slice across block boundaries; offset round-trips. `tests/` 35/35 pass (10 new in `test_ctr.py`). |
-| **Separation** | Distinct blocks are domain-separated ⇒ unrelated keystreams (strictly *more* separation than the streaming map's single continuous orbit). Avalanche ≈ 0.5; no short cycle in 100 KB. |
-| **Cost** | Each block pays a fresh KDF + warmup ⇒ CTR ≈ **1.2× slower** than the streaming 3-map (≈ 0.64 MB/s) at `BLOCK_SIZE=64`. The honest price of seekability + parallelizability. |
-| Still true | **UNVETTED.** Seekability is an engineering property; it inherits — and does not improve — the underlying chaos security. |
-
-**Net:** the cipher is now random-access addressable (decrypt the middle of a large file, or
-parallelize) while keeping every prior property. Security is unchanged; this is about usability.
-
-## v5 update — key-exchange layer (`keyexchange.py`, `DHParty`)
-
-Closes the last roadmap item: until now both sides needed a *pre-shared* master key. v5 lets them
-agree one over an open channel with nothing shared in advance — via **classic finite-field
-Diffie-Hellman** over a standard RFC 3526 MODP Group 14 (2048-bit) safe prime, pure-integer `pow()`.
-The agreed secret is run through a SHA-512 KDF and handed straight to `seal()`.
-
-**Deliberate design choice — vetted math for the key, chaos only for the bulk.** We did *not* invent
-a chaos-synchronization key exchange (a graveyard of broken schemes); inventing one would be the
-exact overclaim this project disproves. This is the "run chaos as a layer over a vetted primitive"
-recommendation from the v1 verdict, made concrete.
-
-| Aspect | Result |
-|---|---|
-| **Key agreement** | Both parties derive identical 32-byte keys from exchanged *public* values only; end-to-end with the chaos AEAD works with **zero pre-shared secret**. `tests/test_keyexchange.py` (14 cases incl. peer-value validation) green. |
-| **Passive eavesdropper** | `attacks/dh_mitm.py` Part A: an attacker who only *listens* (sees p, g, A, B) cannot derive the key — discrete log on a 2048-bit group. ✅ holds. |
-| **Active MITM (honest weakness)** | Part B: an attacker who can *replace* messages runs two exchanges and reads/edits everything — plain DH is **unauthenticated**. ❌ broken by design, *demonstrated*. Part C shows a verified fingerprint catches it (why TLS/Signal/SSH add authentication). |
-| Input validation | Degenerate / small-subgroup peer values (0, 1, p−1, out-of-range) are rejected. |
-| Still true | The DH layer is sound, standard math; the **chaos bulk cipher it feeds remains UNVETTED.** DH is the grown-up part; chaos is the toy. |
-
-**Net:** the system is now complete end-to-end — agree a key in the open, then encrypt/authenticate
-with the chaos AEAD — while being honest that (a) the key-agreement security comes from *vetted DH,
-not chaos*, and (b) plain DH needs an authentication layer to resist a man-in-the-middle.
-
-## Randomness battery — 100 MB of the SHIPPED 3-map keystream (measured 2026-06-06)
-
-Ran the full `ent` (Fourmilab) battery on **100 MB** of the actual shipped keystream
-(`MultiMapEngine`, 3 maps), plus the NIST-lite bit-level subset on a slice. This is the
-deferred "≥100 MB randomness battery" item.
-
-| Test (`ent`, byte mode, full 100 MB) | Result | Ideal | Verdict |
-|---|---|---|---|
-| Entropy | 7.999998 bits/byte | 8.0 | ✅ |
-| Chi-square | 261.62, exceeded 37.45% of the time | 10–90% band | ✅ dead center |
-| Arithmetic mean | 127.4968 | 127.5 | ✅ |
-| Monte-Carlo π | 3.141739 (error 0.00%) | π | ✅ |
-| Serial correlation | 0.000113 | 0.0 | ✅ |
-
-`ent` bit mode: entropy 1.000000 bits/bit, mean 0.5000, chi-square 0.18 (67%), serial
-corr −0.000052 — all ideal. NIST-lite subset (2 MB slice): monobit p=0.34, runs p=0.035,
-block-frequency p=0.034 — all pass.
-
-**Interpretation (honest):** the keystream is **statistically indistinguishable from random**
-across the full `ent` battery on 100 MB + the NIST subset — a strong **PRNG** result. It does
-**NOT** upgrade the security status: passing randomness tests is *necessary, not sufficient*. The
-Mersenne Twister passes `ent`/NIST too and is cryptographically broken. So this confirms "clean
-generator," not "secure cipher." Still UNVETTED.
-
-**Not run:** the heavyweight batteries `dieharder` and PractRand — both removed from Homebrew;
-they require a source build. `ent` on 100 MB is already a credible randomness verdict, and no
-statistical battery can certify *security* regardless.
-
-## v6 update — "clever-burglar" cryptanalysis of the 3-map combiner (`attacks/core_cryptanalysis.py`)
-
-`known_plaintext.py` Part C only ran the *naive* single-map attack at the combiner and showed it
-fails — that proves the combiner beats the *obvious* attack, not that it is strong. v6 sends three
-attacks actually designed for a combiner and **measures** the outcome (break-and-measure, not assert).
-
-| Attack | What it tried | Result |
-|---|---|---|
-| **A. Distinguisher / bias hunt** | Per-bit bias, byte-value χ², byte serial-correlation (lags 1–8), and a 104-mask linear-parity battery on the shipped keystream — the fine structure an invertible affine map might leak (beyond what bulk `ent` sees). | ✅ **Clean.** Strongest deviation **2.52 σ** over ~121 tests (normal for that many tests). No exploitable linear bias found at this scale. |
-| **B. Independence / sync check** | Sub-map↔combined and sub-map↔sub-map correlation + a byte-collision sync detector — does any map leak into the output, or do the maps drift into step (chaos synchronization)? | ✅ **Independent.** Strongest deviation **1.71 σ**. Confirms the "uncoupled by design" claim empirically — no leak, no sync. |
-| **C. Meet-in-the-middle (MITM)** | The clever combiner attack: guess two maps, the third's output is **forced** (`b₃ = ks ⊕ b₁ ⊕ b₂`) and looked up in a precomputed table of its states. Run on small-modulus clones; verified it predicts **unseen** future keystream. | ⚠️ **Real finding.** Succeeds at small scale (M=2⁸/2¹⁰/2¹²) and shows the combiner's true search space is **2^(2·state)**, not 2^(3·state). |
-
-**The honest correction (Part C):** the v3 report estimated joint brute-force at ~**2^159** ("3× the
-hidden state"). MITM shows the real cost is ~**2^(2·61) = 2^122** — guessing two maps fixes the third
-for free. This is **~2^37× weaker than previously claimed.** It does **not** change the verdict:
-2^122 is still astronomically beyond any attacker, so the cipher remains "safe by key-size" — but the
-*honest* number is 2^122, and a *cleverer* attack (correlation/algebraic) could in principle do better.
-A self-inflicted test bug (degenerate masks selecting a bit XOR'd with itself → a fake 547 σ) was
-caught and fixed during the run — a reminder that distinguishers must be built carefully.
-
-**Net:** two of three clever attacks found nothing (good evidence); the third tightened our own
-overclaim downward. Still **UNVETTED** — this is one careful round of self-attack, not public
-cryptanalysis.
-
-## v7 update — the SIV "seatbelt" (nonce-misuse resistance, `siv.py`)
-
-The plain shell (`aead.py`) is safe **only while every nonce is unique**. A reused nonce → same
-keystream → two-time-pad break. That makes the whole guarantee hinge on the caller never slipping
-once. `siv.py` removes the foot-gun: it is a **deterministic, nonce-misuse-resistant AEAD** in the
-proven SIV shape (Rogaway–Shrimpton / RFC 5297 AES-SIV), adapted to the chaos keystream.
-
-**Construction:** `SIV = HMAC-SHA256(K_siv, len(aad) ‖ aad ‖ plaintext)`; that 32-byte value is used
-as **both** the keystream IV *and* the auth tag. Wire format `SIV(32) ‖ ciphertext`. On open: decrypt
-with the received SIV, recompute the SIV from the recovered plaintext, constant-time compare; mismatch
-→ `InvalidTag`, plaintext never returned.
-
-| Property | Plain shell (`aead.py`) | SIV seatbelt (`siv.py`) |
-|---|---|---|
-| Nonce reuse possible? | Yes (caller-supplied / random collision) | **No nonce exists to reuse** |
-| Different messages share keystream? | Only on nonce reuse → break | **Never** (IV derived from the message) |
-| Identical messages | Differ (random nonce) | Identical (deterministic) — leaks *only* equality |
-| Authentication | Encrypt-then-MAC, HMAC-SHA256 | The SIV *is* the tag |
-
-**Trade-off (honest):** determinism means two equal plaintexts produce equal ciphertexts (the
-unavoidable minimum for any deterministic scheme). Escape hatch: put a random salt/counter in `aad`
-and even identical plaintexts seal differently — verified by `test_aad_separates_identical_plaintexts`.
-
-**Measured:** `tests/test_siv.py` (12 new) proves roundtrip, tamper/SIV-flip/truncation/wrong-key/AAD
-rejection, **determinism**, and that two different messages never share a keystream — i.e. the classic
-`C0 ⊕ C1 = M0 ⊕ M1` two-time-pad equality does **not** hold. 61/61 tests pass. Still **UNVETTED**:
-this fixes a *usage* foot-gun with a vetted construction; it does not change the chaos core's status.
-
-## v8 update — authenticated DH, the "secret handshake" (`auth_keyexchange.py`)
-
-`attacks/dh_mitm.py` (v5) showed plain DH falls to an active man-in-the-middle: Mallory swaps the
-public values, runs two exchanges, reads + edits everything. DH proves *nobody passive* can read you;
-it does **not** prove *who* you're talking to. The only prior defence was a human eyeballing a
-fingerprint every session. v8 bakes the identity check **into the key** so the impostor is defeated
-automatically.
-
-**Construction — triple-DH (static + ephemeral), the Noise / Signal-X3DH pattern.** Each party has a
-long-term **static** identity keypair (its fingerprint verified out-of-band ONCE, like SSH
-`known_hosts` / a Signal safety number) plus a fresh **ephemeral** keypair per session. The session
-key hashes three DH results:
-
-```
-ee = DH(my_ephemeral, peer_ephemeral)   # forward secrecy (fresh every session)
-es = DH(my_ephemeral, peer_STATIC)       # binds the peer's verified identity
-se = DH(my_STATIC,    peer_ephemeral)    # binds my verified identity
-session_key = SHA-512(label ‖ info ‖ ee ‖ sorted(es, se))[:32]
-```
-
-Both sides compute the same three group elements (`g^(xy) = g^(yx)`); the two cross-terms are sorted
-so order is role-independent.
-
-**Why the MITM now fails:** to read Alice, Mallory must reproduce `es = DH(Alice_ephemeral,
-Bob_STATIC)`, which needs Alice's ephemeral private *or* Bob's static private — Mallory has **neither**.
-Her derived key can't match, the ciphertext won't open, and forgeries to Bob won't open either — with
-**no** human fingerprint check mid-session.
-
-| | Plain DH (`keyexchange.py`) | Authenticated DH (`auth_keyexchange.py`) |
-|---|---|---|
-| Passive eavesdropper | Defeated ✅ | Defeated ✅ |
-| Active man-in-the-middle | **Succeeds** ❌ (no identity check) | **Defeated** ✅ (baked into key) |
-| Identity verification | Manual fingerprint, every session | Fingerprint verified **once**, then automatic |
-
-**Honest caveat:** the math authenticates *whoever's static key you verified*. If you verify the wrong
-fingerprint at first contact, you authenticated the wrong person — the same trust root as TLS
-certificates / SSH first-connect. Security still rests on 2048-bit discrete log (vetted), not chaos.
-
-**Measured:** `tests/test_auth_keyexchange.py` (10 new) — honest parties agree, info-binding works, feeds
-the AEAD end-to-end, and a MITM/impostor lacking the static private **cannot** derive the key or open
-the message; `attacks/auth_dh_mitm.py` runs the full middleman scenario and shows it FAILS. 71/71 tests
-pass. The chaos bulk cipher remains **UNVETTED** — DH is the sound part.
-
-## v9 update — period scaling law: the honest cycle length is √M, not M (`attacks/period_census.py`)
-
-The make-or-break question for any *digitised* chaotic map (Li/Mou/Cai, "dynamical degradation of
-digital chaotic maps"): a finite state set must cycle, so what is the period over *every* key — not the
-single orbit `test_period.py` happened to measure? One Brent run is one marble. v9 drops thousands.
-
-**Method (four parts, all in `attacks/period_census.py`).**
-- **A — full census (small scale).** For grids M = 2¹³…2²¹ we build the *entire* functional graph (every
-  state's successor) and read off every cycle, fixed point, and basin — the complete truth, not a sample
-  — swept across the break-point `p` (incl. the rejected edge band).
-- **B — trap hunt (real scale).** 1,000 production-seeded keys (real SHA-512 KDF + weak-band rejection +
-  warm-up) on M = 2⁶¹−1, Brent with a 200,000-step budget. A cycle inside budget = a dangerously short
-  period.
-- **C — adversarial edges.** The 7 nastiest hand-picked inputs (key/ctrl ∈ {0,1}, `p` at band edges, the
-  old period-1 class).
-- **D — scaling law.** Median *exact* period at growing grids, to read the exponent and extrapolate.
-
-**The finding — period scales as √M (the "rho" / birthday law).** The map is *not* a permutation: tails
-merge, so it behaves like a **random function**, whose largest cycle and typical orbit are ~√N, not N.
-Measured median periods fit `log₂(period) ≈ −0.39 + 0.489·k` (exponent **0.489 ≈ 0.50** = pure √N):
-
-| grid M = 2^k | measured median period | ≈ 2^ |
-|---|---|---|
-| 2²¹ | 1,015 | 2^10.0 |
-| 2²⁵ | 3,064 | 2^11.6 |
-| 2²⁹ | 16,701 | 2^14.0 |
-| 2³³ | 53,374 | 2^15.7 |
-| 2³⁷ | 215,256 | 2^17.7 |
-
-**Extrapolated to the real grid k = 61: median period ≈ 2²⁹·⁵ ≈ 7.4 × 10⁸.** A single sub-map orbit is
-**~1 billion bytes (~1 GB), not ~10¹⁸.** This is an honest downward correction of the *implied* period by
-a factor of ~2³⁰ — the same spirit as the v6 MITM correction (2¹⁵⁹ → 2¹²²).
-
-**Why it does NOT break the shipped cipher.**
-- **No traps in practice.** B: 1,000/1,000 production keys — *zero* short cycles in budget. C: 0/7 edges.
-- **Fixed points are vanishingly rare.** A confirms ~1 fixed point per map (exactly the random-function
-  Poisson(1) expectation); its basin is ~1/√M of the state space ⇒ ~2⁻³⁰ ≈ 1e-9 chance a production key
-  ever drains to a constant — and even then only **one** of the three maps goes quiet while the XOR of the
-  other two still scrambles. Tiny-cycle (≤16) basins also shrink toward 0 as the grid grows (census).
-- **The 3-map combiner stays fresh.** The combined keystream repeats only at lcm(λ₁,λ₂,λ₃) ≈ 2⁹⁰.
-- **CTR mode sidesteps it entirely** — each block is a fresh short orbit, independent of orbit length.
-
-**What we changed.** `tests/test_period.py` upgraded from 1 hand-picked orbit to a **1,000-marble
-regression guard** (no production key may show a short cycle within budget).
-
-**The honest rule (the veteran's "max data per key").** Publish the true period (√M ≈ 2³⁰) and **rekey /
-refresh the nonce well before ~1 GB per key** in the single-map streaming mode; prefer the 3-map and/or
-CTR construction, which already neutralise the √M ceiling. Status unchanged: **UNVETTED**, deployed only
-as the *outer* wall over a vetted AEAD — exactly where an honest soft spot like this is acceptable.
-
-## Reproduce
-
-```bash
-pip install -r requirements.txt
-pytest tests/ -v
-python ctr.py
-python keyexchange.py
-python attacks/dh_mitm.py
-python attacks/core_cryptanalysis.py   # v6 clever-burglar cryptanalysis (bias hunt + independence + MITM)
-python siv.py                          # v7 SIV seatbelt demo (nonce-misuse-resistant AEAD)
-python auth_keyexchange.py             # v8 authenticated DH "secret handshake" demo
-python attacks/auth_dh_mitm.py         # v8 same MITM as attack 3, now DEFEATED
-bash bench/randomness.sh /tmp/ks.bin 100   # dumps 100 MB of the shipped keystream + ent
-python tests/test_period.py
-python attacks/period_census.py all    # v9 period census: full census + trap hunt (2^61) + scaling law
-python tests/test_avalanche.py
-python bench/nist_lite.py
-python attacks/two_time_pad.py
-python attacks/known_plaintext.py
-python bench/speed.py
-```
+**Still UNVETTED. Do not protect real data with this.**

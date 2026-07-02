@@ -33,3 +33,5 @@ docs/
 
 # Rust build artifacts (large, regenerable via `cargo build`)
 rust/target/
+CLAUDE.md
+HANDOFF.md

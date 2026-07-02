@@ -152,7 +152,7 @@ for a in attacks/*.py; do python3 "$a"; done
 
 **Phase 8 of 8 complete.** The Rust core now mirrors every Python capability. Only Phase 7 (external review) remains on the roadmap.
 
-See [`PROGRESS.md`](PROGRESS.md) for the full build history and roadmap.
+See [`PROGRESS.md`](PROGRESS.md) for current status and [`docs/build-log.md`](docs/build-log.md) for the full build history.
 
 ## License
 
