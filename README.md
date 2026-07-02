@@ -14,6 +14,20 @@ Built as a research artifact. Attacked hard from every angle. Wrapped in two ind
 
 > **⚠️ UNVETTED — do not protect real data with this.** No outside cryptographer has reviewed it. The claims are measured, not proven. See [`REPORT.md`](REPORT.md) and [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
+## Design rationale
+
+Chaos-based encryption has been tried before — and most attempts break because chaotic systems in floating-point are not truly deterministic across machines, or because the map structure leaks through the output. This project addresses both:
+
+**Why integer math.** Floating-point chaos ciphers can't guarantee that two machines produce the same keystream (the "finite precision paradox"). This cipher uses integer PWLCM on a fixed 2¹²⁷−1 grid — same key, same nonce, same output, every machine, every time.
+
+**Why 4 maps.** A single chaotic map is invertible — if you can observe enough output, you can wind it backwards. XOR-combining 4 independent maps hides each one behind the others. Measured independence between maps (correlation 0.008), measured meet-in-the-middle attack cost (~2²⁵⁴), and 4 was the point of diminishing return — 5+ maps add cost without adding meaningful security margin since all maps share the same master key.
+
+**Why 2¹²⁷−1.** M127 is a Mersenne prime, which makes modular reduction free (a shift-and-add instead of a divide). Bigger grid = longer period per map (~2⁶², following the √M random-function law). The nonlinear output mixer then folds the 127-bit state to 64 bits, and only the top 32 bits are published — so the hidden bits act as a firewall against state recovery.
+
+**Why a ratchet.** Stream ciphers have a period — eventually the keystream repeats. The auto-rekey ratchet solves this by replacing the key every 64 KiB with a one-way HMAC chain that burns the old key. Fresh maps, fresh orbits, unbounded length. As a side effect, stealing the live key can't decrypt past messages (forward secrecy).
+
+**Why two locks.** An unvetted cipher should never be the only thing protecting data. The chaos AEAD wraps a vetted inner vault (AES-256-GCM or ChaCha20-Poly1305) with independent keys. Even a total chaos break leaves the plaintext behind a world-standard cipher. The chaos layer is the exposed, sacrificial wall — interesting and unproven; the inner vault is what actually guarantees the data.
+
 ## What makes it interesting
 
 **The engine.** Four independent piecewise linear chaotic maps (integer PWLCM on a 2¹²⁷−1 grid), XOR-combined into one keystream. Each map is branchless and constant-time. The output goes through a nonlinear ARX mixer so the keystream can't be rolled back to the internal state.
@@ -143,6 +157,16 @@ See [`PROGRESS.md`](PROGRESS.md) for the full build history and roadmap.
 ## License
 
 [MIT](LICENSE) — free for any use, research or commercial. This project is unvetted; use at your own risk.
+
+## Prior art
+
+Chaos-based cryptography has a history — and most attempts don't hold up. Key papers that informed this project:
+
+- **Alvarez & Li (2006).** "Some basic cryptographic requirements for chaos-based cryptosystems" — the paper that systematically broke many early chaos ciphers and set the bar for what a credible one must survive.
+- **Biham (1991).** Cryptanalysis of chaotic stream ciphers — established that the map structure leaks through unless explicitly masked.
+- **IACR ePrint 2021/542.** A three-body cipher concept — this project is an independent build of a known idea, not a first. The novelty here is the honest self-attack, the measured bit-security claim, and the two-locks deployability.
+
+The honest framing: this project stands on those shoulders. The value isn't inventing something new — it's building it rigorously, attacking it honestly, and shipping it as a transparent research artifact.
 
 ---
 
